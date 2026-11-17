@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import './style.css';
 import { createShark } from './shark.js';
+import { createIsland } from './island.js';
 
 // ---------- Settings ----------
 const DRIFT_SPEED = 2; // how fast the world flows past the raft
@@ -369,19 +370,32 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// ---------- Shark + game over ----------
+// ---------- Shark, island, win and lose ----------
 const shark = createShark(scene, raft, tiles, waveHeight);
-let gameOver = false;
+const island = createIsland(scene);
 
-function checkGameOver() {
-  if (gameOver || tiles.size > 0) return;
-  gameOver = true;
+const JOURNEY_TIME = 180; // seconds to reach the island
+let journeyTime = 0;
+let gameEnded = false;
+
+// Journey bar at the top of the screen
+const journey = document.createElement('div');
+journey.id = 'journey';
+journey.innerHTML = `
+  <div class="label">Island</div>
+  <div class="bar"><div class="fill"></div></div>
+`;
+document.body.appendChild(journey);
+const journeyFill = journey.querySelector('.fill');
+
+function showEndScreen(title, text) {
+  gameEnded = true;
   const box = document.createElement('div');
   box.id = 'game-over';
   box.innerHTML = `
-    <h1>Your raft is gone</h1>
-    <p>The shark won this time.</p>
-    <button id="restart">Try again</button>
+    <h1>${title}</h1>
+    <p>${text}</p>
+    <button id="restart">Play again</button>
   `;
   document.body.appendChild(box);
   document.getElementById('restart').addEventListener('click', () => location.reload());
@@ -406,8 +420,27 @@ function animate() {
 
   updateDebris(dt, t);
   updateHook(dt);
-  shark.update(dt, t);
-  checkGameOver();
+
+  if (!gameEnded) {
+    shark.update(dt, t);
+
+    journeyTime += dt;
+    const progress = Math.min(journeyTime / JOURNEY_TIME, 1);
+    journeyFill.style.width = `${progress * 100}%`;
+    island.update(progress);
+
+    // Stop new planks spawning when we're close to the island
+    if (progress > 0.85) spawnTimer = Infinity;
+
+    if (tiles.size === 0) {
+      showEndScreen('Your raft is gone', 'The shark won this time.');
+    } else if (progress >= 1) {
+      showEndScreen(
+        'You made it!',
+        `You reached the island with ${tiles.size} tiles left. Island update coming soon.`
+      );
+    }
+  }
 
   renderer.render(scene, camera);
 }
