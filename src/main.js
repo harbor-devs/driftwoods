@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import './style.css';
 
+// ---------- Settings ----------
+const DRIFT_SPEED = 2; // how fast the world flows past the raft
+const HOOK_SPEED = 22; // how fast the hook flies out
+const HOOK_RANGE = 14; // how far you can throw
+const CATCH_RADIUS = 1.4; // how close the hook must get to grab something
+
 // ---------- Renderer, scene, camera ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -34,21 +40,36 @@ sun.shadow.camera.top = 15;
 sun.shadow.camera.bottom = -15;
 scene.add(sun);
 
+// ---------- HUD (the counter in the top left) ----------
+const hud = document.createElement('div');
+hud.id = 'hud';
+document.body.appendChild(hud);
+
+let planks = 0;
+function updateHud() {
+  hud.innerHTML = `
+    <div class="count">Planks: ${planks}</div>
+    <div class="hint">Click the water to throw your hook</div>
+  `;
+}
+updateHud();
+
 // ---------- Ocean ----------
 // One function decides how high the water is at any point and time.
-// The ocean AND the raft both use it, so the raft floats on the real waves.
+// The "z - t * DRIFT_SPEED" part makes the waves roll toward you,
+// so it feels like the raft is moving forward.
 function waveHeight(x, z, t) {
   return (
     Math.sin(x * 0.25 + t * 1.2) * 0.35 +
-    Math.cos(z * 0.2 + t * 0.9) * 0.35
+    Math.cos((z - t * DRIFT_SPEED) * 0.2) * 0.35
   );
 }
 
 const oceanGeo = new THREE.PlaneGeometry(200, 200, 80, 80);
-oceanGeo.rotateX(-Math.PI / 2); // lay the plane flat
+oceanGeo.rotateX(-Math.PI / 2);
 const oceanMat = new THREE.MeshStandardMaterial({
   color: 0x2a8fbd,
-  flatShading: true, // this gives the low-poly faceted look
+  flatShading: true,
   roughness: 0.6,
 });
 const ocean = new THREE.Mesh(oceanGeo, oceanMat);
@@ -72,7 +93,6 @@ const woodLight = new THREE.MeshStandardMaterial({ color: 0xc8955c, flatShading:
 const woodDark = new THREE.MeshStandardMaterial({ color: 0xa8743f, flatShading: true });
 const plankGeo = new THREE.BoxGeometry(0.62, 0.25, 1.9);
 
-// One raft tile = 3 planks side by side
 function makeTile() {
   const tile = new THREE.Group();
   for (let i = 0; i < 3; i++) {
@@ -88,8 +108,6 @@ function makeTile() {
 const raft = new THREE.Group();
 scene.add(raft);
 
-// We keep every tile in a Map using its grid spot as the key, like "0,1".
-// Later this is how we add new tiles and how the shark removes them.
 const tiles = new Map();
 
 function addTile(gx, gz) {
@@ -101,22 +119,186 @@ function addTile(gx, gz) {
   tiles.set(key, tile);
 }
 
-// Starting raft: 2 x 2 tiles
 addTile(0, 0);
 addTile(1, 0);
 addTile(0, 1);
 addTile(1, 1);
 
+// The point the hook is thrown from and returns to
+const raftCenter = new THREE.Vector3(0, 0.4, 0);
+
+// ---------- Floating debris (planks to collect) ----------
+const debrisList = [];
+const debrisGeo = new THREE.BoxGeometry(1.6, 0.2, 0.4);
+
+function spawnDebris() {
+  const mesh = new THREE.Mesh(debrisGeo, woodDark);
+  mesh.position.set((Math.random() - 0.5) * 30, 0, -45);
+  mesh.rotation.y = Math.random() * Math.PI;
+  mesh.castShadow = true;
+  scene.add(mesh);
+  debrisList.push({ mesh, hooked: false });
+}
+
+let spawnTimer = 0;
+
+function updateDebris(dt, t) {
+  spawnTimer -= dt;
+  if (spawnTimer <= 0) {
+    spawnDebris();
+    spawnTimer = 1 + Math.random() * 1.5;
+  }
+
+  // Loop backwards so we can safely remove items while looping
+  for (let i = debrisList.length - 1; i >= 0; i--) {
+    const d = debrisList[i];
+    if (d.hooked) continue; // the hook controls hooked debris
+
+    d.mesh.position.z += DRIFT_SPEED * dt;
+    d.mesh.position.y = waveHeight(d.mesh.position.x, d.mesh.position.z, t) + 0.05;
+
+    // Floated past us, remove it
+    if (d.mesh.position.z > 30) {
+      scene.remove(d.mesh);
+      debrisList.splice(i, 1);
+    }
+  }
+}
+
+// ---------- Hook ----------
+const hookMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(0.25, 8, 6),
+  new THREE.MeshStandardMaterial({ color: 0x555555, flatShading: true })
+);
+hookMesh.castShadow = true;
+hookMesh.visible = false;
+scene.add(hookMesh);
+
+const ropeGeo = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(),
+  new THREE.Vector3(),
+]);
+const rope = new THREE.Line(ropeGeo, new THREE.LineBasicMaterial({ color: 0x3b2a1a }));
+rope.frustumCulled = false; // always draw the rope
+rope.visible = false;
+scene.add(rope);
+
+// state can be: 'idle' (in hand), 'out' (flying), 'back' (reeling in)
+const hook = { state: 'idle', target: new THREE.Vector3(), caught: null };
+
+// Moves "current" toward "target" by at most "maxStep"
+function moveTowards(current, target, maxStep) {
+  const diff = target.clone().sub(current);
+  const dist = diff.length();
+  if (dist <= maxStep) {
+    current.copy(target);
+    return;
+  }
+  current.add(diff.multiplyScalar(maxStep / dist));
+}
+
+function tryCatch() {
+  const pos = hookMesh.position;
+  for (const d of debrisList) {
+    if (d.hooked) continue;
+    const dx = d.mesh.position.x - pos.x;
+    const dz = d.mesh.position.z - pos.z;
+    if (Math.sqrt(dx * dx + dz * dz) < CATCH_RADIUS) {
+      d.hooked = true;
+      hook.caught = d;
+      hook.state = 'back';
+      return;
+    }
+  }
+}
+
+function updateHook(dt) {
+  if (hook.state === 'idle') {
+    hookMesh.visible = false;
+    rope.visible = false;
+    return;
+  }
+
+  hookMesh.visible = true;
+  rope.visible = true;
+  const pos = hookMesh.position;
+
+  if (hook.state === 'out') {
+    moveTowards(pos, hook.target, HOOK_SPEED * dt);
+    tryCatch();
+    if (hook.state === 'out' && pos.distanceTo(hook.target) < 0.1) {
+      hook.state = 'back';
+    }
+  } else if (hook.state === 'back') {
+    moveTowards(pos, raftCenter, HOOK_SPEED * 0.6 * dt);
+    if (!hook.caught) tryCatch();
+
+    if (pos.distanceTo(raftCenter) < 0.5) {
+      if (hook.caught) {
+        scene.remove(hook.caught.mesh);
+        debrisList.splice(debrisList.indexOf(hook.caught), 1);
+        hook.caught = null;
+        planks++;
+        updateHud();
+      }
+      hook.state = 'idle';
+    }
+  }
+
+  // Caught plank sticks to the hook
+  if (hook.caught) hook.caught.mesh.position.copy(pos);
+
+  // Rope goes from raft to hook
+  const p = ropeGeo.attributes.position;
+  p.setXYZ(0, raftCenter.x, raftCenter.y, raftCenter.z);
+  p.setXYZ(1, pos.x, pos.y, pos.z);
+  p.needsUpdate = true;
+}
+
+// ---------- Mouse: click the water to throw ----------
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const aimPoint = new THREE.Vector3();
+
+window.addEventListener('pointerdown', (e) => {
+  if (hook.state !== 'idle') return;
+
+  // Turn the mouse position into a point on the water
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  if (!raycaster.ray.intersectPlane(waterPlane, aimPoint)) return;
+
+  // Limit how far the hook can go
+  const dir = aimPoint.clone().sub(raftCenter);
+  dir.y = 0;
+  if (dir.length() > HOOK_RANGE) dir.setLength(HOOK_RANGE);
+
+  hook.target.copy(raftCenter).add(dir);
+  hook.target.y = 0.4;
+  hookMesh.position.copy(raftCenter);
+  hook.state = 'out';
+});
+
 // ---------- Game loop ----------
+let lastTime = performance.now();
+
 function animate() {
-  const t = performance.now() / 1000;
+  const now = performance.now();
+  const dt = Math.min((now - lastTime) / 1000, 0.05); // seconds since last frame
+  lastTime = now;
+  const t = now / 1000;
 
   updateOcean(t);
 
-  // Raft rides the wave and tilts a little
   raft.position.y = waveHeight(0, 0, t) + 0.15;
   raft.rotation.x = Math.sin(t * 0.9) * 0.04;
   raft.rotation.z = Math.cos(t * 1.2) * 0.04;
+  raftCenter.y = raft.position.y + 0.3;
+
+  updateDebris(dt, t);
+  updateHook(dt);
 
   renderer.render(scene, camera);
 }
