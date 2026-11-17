@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
+import { createShark } from './shark.js';
 
 // ---------- Settings ----------
 const DRIFT_SPEED = 2; // how fast the world flows past the raft
@@ -368,6 +369,24 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// ---------- Shark + game over ----------
+const shark = createShark(scene, raft, tiles, waveHeight);
+let gameOver = false;
+
+function checkGameOver() {
+  if (gameOver || tiles.size > 0) return;
+  gameOver = true;
+  const box = document.createElement('div');
+  box.id = 'game-over';
+  box.innerHTML = `
+    <h1>Your raft is gone</h1>
+    <p>The shark won this time.</p>
+    <button id="restart">Try again</button>
+  `;
+  document.body.appendChild(box);
+  document.getElementById('restart').addEventListener('click', () => location.reload());
+}
+
 // ---------- Game loop ----------
 let lastTime = performance.now();
 
@@ -387,6 +406,8 @@ function animate() {
 
   updateDebris(dt, t);
   updateHook(dt);
+  shark.update(dt, t);
+  checkGameOver();
 
   renderer.render(scene, camera);
 }
