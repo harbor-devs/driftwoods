@@ -6,6 +6,7 @@ const DRIFT_SPEED = 2; // how fast the world flows past the raft
 const HOOK_SPEED = 22; // how fast the hook flies out
 const HOOK_RANGE = 14; // how far you can throw
 const CATCH_RADIUS = 1.4; // how close the hook must get to grab something
+const TILE_COST = 3; // planks needed for one new raft tile
 
 // ---------- Renderer, scene, camera ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -46,10 +47,15 @@ hud.id = 'hud';
 document.body.appendChild(hud);
 
 let planks = 0;
+let buildMode = false;
+
 function updateHud() {
+  const hint = buildMode
+    ? `BUILD MODE: click next to your raft to add a tile (${TILE_COST} planks). Press B to stop building`
+    : 'Click the water to throw your hook. Press B to build';
   hud.innerHTML = `
     <div class="count">Planks: ${planks}</div>
-    <div class="hint">Click the water to throw your hook</div>
+    <div class="hint">${hint}</div>
   `;
 }
 updateHud();
@@ -93,6 +99,7 @@ const woodLight = new THREE.MeshStandardMaterial({ color: 0xc8955c, flatShading:
 const woodDark = new THREE.MeshStandardMaterial({ color: 0xa8743f, flatShading: true });
 const plankGeo = new THREE.BoxGeometry(0.62, 0.25, 1.9);
 
+// One raft tile = 3 planks side by side
 function makeTile() {
   const tile = new THREE.Group();
   for (let i = 0; i < 3; i++) {
@@ -108,6 +115,8 @@ function makeTile() {
 const raft = new THREE.Group();
 scene.add(raft);
 
+// Every tile is stored by its grid spot, like "0,1".
+// This is how we add tiles now and how the shark will remove them later.
 const tiles = new Map();
 
 function addTile(gx, gz) {
@@ -119,6 +128,7 @@ function addTile(gx, gz) {
   tiles.set(key, tile);
 }
 
+// Starting raft: 2 x 2 tiles
 addTile(0, 0);
 addTile(1, 0);
 addTile(0, 1);
@@ -255,23 +265,91 @@ function updateHook(dt) {
   p.needsUpdate = true;
 }
 
-// ---------- Mouse: click the water to throw ----------
+// ---------- Mouse + building ----------
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 const waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const aimPoint = new THREE.Vector3();
 
-window.addEventListener('pointerdown', (e) => {
-  if (hook.state !== 'idle') return;
-
-  // Turn the mouse position into a point on the water
+// Turns the mouse position on screen into a point on the water
+function getWaterPoint(e) {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
-  if (!raycaster.ray.intersectPlane(waterPlane, aimPoint)) return;
+  return raycaster.ray.intersectPlane(waterPlane, aimPoint);
+}
 
-  // Limit how far the hook can go
-  const dir = aimPoint.clone().sub(raftCenter);
+// Turns a point on the water into a raft grid spot (the opposite of addTile's math)
+function worldToGrid(p) {
+  return {
+    gx: Math.round(p.x / TILE_SIZE + 0.5),
+    gz: Math.round(p.z / TILE_SIZE + 0.5),
+  };
+}
+
+function isNextToRaft(gx, gz) {
+  return (
+    tiles.has(`${gx + 1},${gz}`) ||
+    tiles.has(`${gx - 1},${gz}`) ||
+    tiles.has(`${gx},${gz + 1}`) ||
+    tiles.has(`${gx},${gz - 1}`)
+  );
+}
+
+function canBuildAt(gx, gz) {
+  return !tiles.has(`${gx},${gz}`) && isNextToRaft(gx, gz);
+}
+
+// The see-through preview tile. It's added to the raft so it bobs with it.
+const ghostMat = new THREE.MeshStandardMaterial({
+  color: 0x6ee07a,
+  transparent: true,
+  opacity: 0.5,
+});
+const ghost = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.25, 1.9), ghostMat);
+ghost.visible = false;
+raft.add(ghost);
+let ghostSpot = null;
+
+function hideGhost() {
+  ghost.visible = false;
+  ghostSpot = null;
+}
+
+window.addEventListener('pointermove', (e) => {
+  if (!buildMode) return;
+  const p = getWaterPoint(e);
+  if (!p) return;
+
+  const { gx, gz } = worldToGrid(p);
+  if (canBuildAt(gx, gz)) {
+    ghostSpot = { gx, gz };
+    ghost.position.set((gx - 0.5) * TILE_SIZE, 0, (gz - 0.5) * TILE_SIZE);
+    ghost.visible = true;
+    ghostMat.color.set(planks >= TILE_COST ? 0x6ee07a : 0xe06e6e); // green or red
+  } else {
+    hideGhost();
+  }
+});
+
+window.addEventListener('pointerdown', (e) => {
+  // Build mode: place a tile
+  if (buildMode) {
+    if (ghostSpot && planks >= TILE_COST) {
+      addTile(ghostSpot.gx, ghostSpot.gz);
+      planks -= TILE_COST;
+      hideGhost();
+      updateHud();
+    }
+    return;
+  }
+
+  // Normal mode: throw the hook
+  if (hook.state !== 'idle') return;
+  const p = getWaterPoint(e);
+  if (!p) return;
+
+  const dir = p.clone().sub(raftCenter);
   dir.y = 0;
   if (dir.length() > HOOK_RANGE) dir.setLength(HOOK_RANGE);
 
@@ -279,6 +357,15 @@ window.addEventListener('pointerdown', (e) => {
   hook.target.y = 0.4;
   hookMesh.position.copy(raftCenter);
   hook.state = 'out';
+});
+
+// B key switches build mode on and off
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'b' || e.key === 'B') {
+    buildMode = !buildMode;
+    hideGhost();
+    updateHud();
+  }
 });
 
 // ---------- Game loop ----------
@@ -292,6 +379,7 @@ function animate() {
 
   updateOcean(t);
 
+  // Raft rides the wave and tilts a little
   raft.position.y = waveHeight(0, 0, t) + 0.15;
   raft.rotation.x = Math.sin(t * 0.9) * 0.04;
   raft.rotation.z = Math.cos(t * 1.2) * 0.04;
