@@ -51,7 +51,7 @@ export function createCharacter(raft) {
   let facing = 0; // which way he's looking
   let walkCycle = 0; // drives the waddle
 
-  // When he swings the oar, he snaps to face that way for a moment
+  // When he swings the oar (or in first person), he faces a set direction
   let forcedFacing = 0;
   let forceTimer = 0;
 
@@ -61,6 +61,12 @@ export function createCharacter(raft) {
   function faceDirection(angle, holdTime) {
     forcedFacing = angle;
     forceTimer = holdTime;
+  }
+
+  // First person hides his body so the camera isn't inside it (the oar stays visible)
+  function setBodyVisible(visible) {
+    wobble.visible = visible;
+    for (const foot of feet) foot.visible = visible;
   }
 
   // input is { x, z }, each between -1 and 1
@@ -102,7 +108,7 @@ export function createCharacter(raft) {
     // ---------- Facing ----------
     const speed = Math.hypot(velocity.x, velocity.y);
     if (forceTimer > 0) {
-      // Swinging: turn fast toward the swing direction
+      // Swinging or first person: turn fast toward the set direction
       forceTimer -= dt;
       facing += wrapAngle(forcedFacing - facing) * (1 - Math.exp(-30 * dt));
     } else if (speed > 0.3) {
@@ -129,11 +135,19 @@ export function createCharacter(raft) {
     feet[0].position.z = 0.05 + step * 0.15 * moving;
     feet[1].position.z = 0.05 - step * 0.15 * moving;
 
-    // Update world positions for the hook and the oar
+    // Update world positions for the hook, oar and camera
     root.getWorldPosition(worldPos);
     hand.copy(worldPos);
     hand.y += 0.6;
   }
 
-  return { update, faceDirection, root, position: root.position, worldPos, hand };
+  return {
+    update,
+    faceDirection,
+    setBodyVisible,
+    root,
+    position: root.position,
+    worldPos,
+    hand,
+  };
 }
