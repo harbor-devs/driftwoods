@@ -9,12 +9,14 @@ export const TILE_COST = 3; // planks needed for one new tile
 export const JOURNEY_TIME = 180; // seconds to reach the island
 
 // Raft steering (from the character leaning)
-export const STEER_ACCEL = 14; // how hard leaning pushes the raft sideways
-export const STEER_MAX_SPEED = 6; // top sideways speed (for the starting 2x2 raft)
+export const STEER_ACCEL = 14; // how hard leaning pushes the raft
+export const STEER_MAX_SPEED = 6; // top speed (for the starting 2x2 raft)
 export const STEER_DRAG = 2.5; // how fast it slows down
-export const SIZE_SLOWDOWN = 0.08; // each extra tile makes steering this much slower
+export const SIZE_SLOWDOWN = 0.08; // each extra tile makes the raft this much slower and heavier
 export const LEAN_DEADZONE = 0.15; // stand near the middle and the raft doesn't drift
 export const WORLD_LIMIT = 40; // how far left or right you can go
+export const FORWARD_LIMIT = 10; // how far forward (up the screen) you can go
+export const BACK_LIMIT = 6; // how far back (down the screen) you can go
 
 // Character
 export const WALK_SPEED = 3.5; // top walking speed

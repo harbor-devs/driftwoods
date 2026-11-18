@@ -40,8 +40,9 @@ scene.add(sun);
 scene.add(sun.target); // needed so we can move where the sun points
 
 // ---------- Camera shake ----------
-// baseX = where the camera would be without any shake
+// baseX / baseZ = where the camera would be without any shake
 let baseX = 0;
+let baseZ = 0;
 let shakeAmount = 0;
 const SHAKE_FADE = 6; // bigger number = shake dies out faster
 
@@ -50,11 +51,12 @@ export function shakeCamera(strength) {
   shakeAmount = Math.max(shakeAmount, strength); // a big shake isn't cancelled by a small one
 }
 
-// Camera follows the raft sideways, but a little behind, so you can SEE the raft move.
+// Camera follows the raft on x and z, a little behind, so you can SEE the raft move.
 // The sun follows exactly, so shadows stay sharp around the raft.
-export function followRaft(x, dt) {
+export function followRaft(x, z, dt) {
   const smooth = 1 - Math.exp(-2.5 * dt); // smaller number = lazier camera
   baseX += (x - baseX) * smooth;
+  baseZ += (z - baseZ) * smooth;
 
   // Random wobble that fades out over time
   shakeAmount *= Math.exp(-SHAKE_FADE * dt);
@@ -62,11 +64,11 @@ export function followRaft(x, dt) {
   const offX = (Math.random() * 2 - 1) * shakeAmount;
   const offY = (Math.random() * 2 - 1) * shakeAmount;
 
-  camera.position.set(baseX + offX, CAM_HEIGHT + offY, CAM_BACK);
-  camera.lookAt(baseX, 0, 0); // look at the calm spot, so the wobble feels like a jolt
+  camera.position.set(baseX + offX, CAM_HEIGHT + offY, baseZ + CAM_BACK);
+  camera.lookAt(baseX, 0, baseZ); // look at the calm spot, so the wobble feels like a jolt
 
-  sun.position.x = x + 10;
-  sun.target.position.x = x;
+  sun.position.set(x + 10, 20, z + 8);
+  sun.target.position.set(x, 0, z);
 }
 
 // ---------- Keep it fullscreen when the window resizes ----------

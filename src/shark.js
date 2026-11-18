@@ -66,10 +66,14 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
     return SWIM_SPEED * (1 + level * ANGER_PER_LEVEL);
   }
 
-  // Put the shark somewhere out around the raft
+  // Put the shark somewhere out around the raft (around its real x AND z)
   function placeOnCircle(radius) {
     angle = Math.random() * Math.PI * 2;
-    pos.set(raft.position.x + Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+    pos.set(
+      raft.position.x + Math.cos(angle) * radius,
+      0,
+      raft.position.z + Math.sin(angle) * radius
+    );
   }
 
   placeOnCircle(CIRCLE_RADIUS);
@@ -167,7 +171,7 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
       goal.set(
         raft.position.x + Math.cos(angle) * CIRCLE_RADIUS,
         0,
-        Math.sin(angle) * CIRCLE_RADIUS
+        raft.position.z + Math.sin(angle) * CIRCLE_RADIUS
       );
       swimTowards(goal, speed() * 0.8, dt);
 

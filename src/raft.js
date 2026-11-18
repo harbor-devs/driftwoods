@@ -7,6 +7,8 @@ import {
   SIZE_SLOWDOWN,
   LEAN_DEADZONE,
   WORLD_LIMIT,
+  FORWARD_LIMIT,
+  BACK_LIMIT,
 } from './config.js';
 import { waveHeight } from './ocean.js';
 
@@ -47,7 +49,8 @@ export function createRaft(scene) {
   // The middle of the raft in the world (the spear still uses this)
   const center = new THREE.Vector3(0, 0.4, 0);
 
-  let velocityX = 0; // sideways speed
+  // Raft speed on both axes. Forward (up the screen) is negative z.
+  const velocity = { x: 0, z: 0 };
 
   // Grid spot -> position on the raft
   function gridToLocal(gx, gz) {
@@ -82,6 +85,19 @@ export function createRaft(scene) {
         bestDist = d;
         best = { x: tile.position.x, z: tile.position.z };
       }
+    }
+    return best;
+  }
+
+  // Shortest distance from any tile to a point in the world (used for landing on the island)
+  function distanceTo(point) {
+    let best = Infinity;
+    for (const tile of tiles.values()) {
+      const d = Math.hypot(
+        group.position.x + tile.position.x - point.x,
+        group.position.z + tile.position.z - point.z
+      );
+      if (d < best) best = d;
     }
     return best;
   }
@@ -123,34 +139,55 @@ export function createRaft(scene) {
 
   // charPos = where the character stands on the raft
   function update(dt, t, charPos) {
-    // How far he is from the balance point decides the lean (-1 to 1)
+    // How far he is from the balance point decides the lean (-1 to 1) on both axes
     const com = centerOfMass();
     const leanX = deadzone(clamp((charPos.x - com.x) / TILE_SIZE, -1, 1));
-    const leanZ = clamp((charPos.z - com.z) / TILE_SIZE, -1, 1);
+    const leanZ = deadzone(clamp((charPos.z - com.z) / TILE_SIZE, -1, 1));
 
-    // Bigger raft = lower top speed
+    // Bigger raft = heavier: slower to speed up AND lower top speed
     const extraTiles = Math.max(0, tiles.size - 4);
-    const maxSpeed = STEER_MAX_SPEED / (1 + extraTiles * SIZE_SLOWDOWN);
+    const heaviness = 1 + extraTiles * SIZE_SLOWDOWN;
+    const maxSpeed = STEER_MAX_SPEED / heaviness;
+    const accel = STEER_ACCEL / heaviness;
 
-    velocityX += leanX * STEER_ACCEL * dt; // leaning pushes it
-    velocityX -= velocityX * STEER_DRAG * dt; // water slows it down
-    velocityX = clamp(velocityX, -maxSpeed, maxSpeed);
+    // Leaning pushes it, water slows it down
+    velocity.x += leanX * accel * dt;
+    velocity.z += leanZ * accel * dt;
+    velocity.x -= velocity.x * STEER_DRAG * dt;
+    velocity.z -= velocity.z * STEER_DRAG * dt;
 
-    group.position.x += velocityX * dt;
+    // Cap the total speed, so going diagonal isn't faster
+    const speed = Math.hypot(velocity.x, velocity.z);
+    if (speed > maxSpeed) {
+      velocity.x *= maxSpeed / speed;
+      velocity.z *= maxSpeed / speed;
+    }
 
-    // Stop at the edge of the world
+    group.position.x += velocity.x * dt;
+    group.position.z += velocity.z * dt;
+
+    // Edges of the world: left/right, forward (negative z), back (positive z)
     if (Math.abs(group.position.x) > WORLD_LIMIT) {
       group.position.x = clamp(group.position.x, -WORLD_LIMIT, WORLD_LIMIT);
-      velocityX = 0;
+      velocity.x = 0;
+    }
+    if (group.position.z < -FORWARD_LIMIT) {
+      group.position.z = -FORWARD_LIMIT;
+      velocity.z = 0;
+    }
+    if (group.position.z > BACK_LIMIT) {
+      group.position.z = BACK_LIMIT;
+      velocity.z = 0;
     }
 
     // Ride the waves, and dip toward the side he's standing on
-    group.position.y = waveHeight(group.position.x, 0, t) + 0.15;
+    group.position.y = waveHeight(group.position.x, group.position.z, t) + 0.15;
     group.rotation.x = Math.sin(t * 0.9) * 0.04 + leanZ * 0.05;
     group.rotation.z = Math.cos(t * 1.2) * 0.04 - leanX * 0.07;
 
     center.x = group.position.x;
     center.y = group.position.y + 0.3;
+    center.z = group.position.z;
   }
 
   // Starting raft: 2 x 2 tiles
@@ -168,6 +205,7 @@ export function createRaft(scene) {
     worldToGrid,
     hasTileAt,
     closestTileCenter,
+    distanceTo,
     canBuildAt,
     update,
   };

@@ -23,7 +23,7 @@ import {
 // ---------- Game settings ----------
 const MAP_PIECES = 3; // bottles you need to find
 const RAFT_GOAL = 10; // tiles your raft needs before you can sail to the island
-const DOCK_DISTANCE = 9; // how lined up with the island you must be to land
+const BEACH_REACH = 10.5; // a tile this close to the island's middle = touching the beach
 
 // ---------- Game state ----------
 let planks = 0;
@@ -250,11 +250,12 @@ function animate() {
   const t = now / 1000;
 
   const raftX = raft.group.position.x;
+  const raftZ = raft.group.position.z;
 
   ocean.update(t);
   raft.update(dt, t, character.position); // raft leans based on where he stands
   character.update(dt, t, getMoveInput());
-  followRaft(raftX, dt);
+  followRaft(raftX, raftZ, dt);
   debris.update(dt, t, raftX);
   hook.update(dt);
   oar.update(dt);
@@ -273,15 +274,16 @@ function animate() {
 
     if (raft.tiles.size === 0) {
       endGame('Your raft is gone', 'The shark won this time.');
-    } else if (island.isArrived()) {
-      const linedUp = Math.abs(raftX - island.position.x) < DOCK_DISTANCE;
-      if (linedUp) {
+    } else if (islandRevealed) {
+      // Win = any tile actually touches the island's beach
+      const touching = raft.distanceTo(island.position) < BEACH_REACH;
+      if (touching) {
         endGame(
           'You made it!',
           `You found the map, built a ${raft.tiles.size} tile raft, and reached the island.`
         );
-      } else if (!steerHintShown) {
-        showToast('Steer over to the island!');
+      } else if (island.isArrived() && !steerHintShown) {
+        showToast('Sail over and touch the beach!');
         steerHintShown = true;
       }
     }
