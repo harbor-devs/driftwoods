@@ -12,8 +12,9 @@ function moveTowards(current, target, maxStep) {
   current.add(diff.multiplyScalar(maxStep / dist));
 }
 
-// onCatch runs every time a piece of debris reaches the raft
-export function createHook(scene, raft, debris, onCatch) {
+// origin = where the hook is thrown from and comes back to (the character's hands)
+// onCatch runs every time a piece of debris reaches him
+export function createHook(scene, origin, debris, onCatch) {
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(0.25, 8, 6),
     new THREE.MeshStandardMaterial({ color: 0x555555, flatShading: true })
@@ -39,13 +40,13 @@ export function createHook(scene, raft, debris, onCatch) {
   function throwAt(point) {
     if (state !== 'idle') return;
 
-    const dir = point.clone().sub(raft.center);
+    const dir = point.clone().sub(origin);
     dir.y = 0;
     if (dir.length() > HOOK_RANGE) dir.setLength(HOOK_RANGE);
 
-    target.copy(raft.center).add(dir);
+    target.copy(origin).add(dir);
     target.y = 0.4;
-    mesh.position.copy(raft.center);
+    mesh.position.copy(origin);
     state = 'out';
   }
 
@@ -79,10 +80,10 @@ export function createHook(scene, raft, debris, onCatch) {
       tryCatch();
       if (state === 'out' && pos.distanceTo(target) < 0.1) state = 'back';
     } else if (state === 'back') {
-      moveTowards(pos, raft.center, HOOK_SPEED * 0.6 * dt);
+      moveTowards(pos, origin, HOOK_SPEED * 0.6 * dt);
       if (!caught) tryCatch();
 
-      if (pos.distanceTo(raft.center) < 0.5) {
+      if (pos.distanceTo(origin) < 0.5) {
         if (caught) {
           debris.remove(caught);
           caught = null;
@@ -95,9 +96,9 @@ export function createHook(scene, raft, debris, onCatch) {
     // Caught piece sticks to the hook
     if (caught) caught.mesh.position.copy(pos);
 
-    // Rope goes from raft to hook
+    // Rope goes from his hands to the hook
     const p = ropeGeo.attributes.position;
-    p.setXYZ(0, raft.center.x, raft.center.y, raft.center.z);
+    p.setXYZ(0, origin.x, origin.y, origin.z);
     p.setXYZ(1, pos.x, pos.y, pos.z);
     p.needsUpdate = true;
   }

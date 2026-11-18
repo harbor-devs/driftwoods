@@ -102,3 +102,25 @@ canvas {
   color: #2b3a42;
   cursor: pointer;
 }
+
+#toast {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  padding: 10px 18px;
+  background: rgba(20, 40, 55, 0.85);
+  color: white;
+  border-radius: 10px;
+  font-family: system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+}
+
+#toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

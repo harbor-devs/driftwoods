@@ -9,7 +9,7 @@ export function createHud() {
   function update(planks, buildMode) {
     const hint = buildMode
       ? `BUILD MODE: click next to your raft to add a tile (${TILE_COST} planks). Press B to stop building`
-      : 'A / D to steer. Click the water to throw your hook. Press B to build';
+      : 'WASD walk (lean to steer). Click water: hook. Space: spear. B: build';
     el.innerHTML = `
       <div class="count">Planks: ${planks}</div>
       <div class="hint">${hint}</div>
@@ -35,6 +35,23 @@ export function createJourneyBar() {
   }
 
   return { set };
+}
+
+// ---------- Popup message (bottom middle) ----------
+let toastTimeout = null;
+
+export function showToast(text) {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.classList.add('show');
+
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => el.classList.remove('show'), 1800);
 }
 
 // ---------- Win / lose screen ----------

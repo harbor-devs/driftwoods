@@ -5,6 +5,7 @@ import {
   STEER_MAX_SPEED,
   STEER_DRAG,
   SIZE_SLOWDOWN,
+  LEAN_DEADZONE,
   WORLD_LIMIT,
 } from './config.js';
 import { waveHeight } from './ocean.js';
@@ -30,6 +31,12 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+// Small values near zero become zero, so standing in the middle = no drift
+function deadzone(value) {
+  if (Math.abs(value) < LEAN_DEADZONE) return 0;
+  return value;
+}
+
 export function createRaft(scene) {
   const group = new THREE.Group();
   scene.add(group);
@@ -37,7 +44,7 @@ export function createRaft(scene) {
   // Every tile is stored by its grid spot, like "0,1"
   const tiles = new Map();
 
-  // The point the hook is thrown from and returns to
+  // The middle of the raft in the world (the spear still uses this)
   const center = new THREE.Vector3(0, 0.4, 0);
 
   let velocityX = 0; // sideways speed
@@ -47,15 +54,48 @@ export function createRaft(scene) {
     return { x: (gx - 0.5) * TILE_SIZE, z: (gz - 0.5) * TILE_SIZE };
   }
 
-  // Point on the water -> grid spot.
-  // We subtract the raft's position first, because the raft can move.
-  function worldToGrid(p) {
-    const localX = p.x - group.position.x;
-    const localZ = p.z - group.position.z;
+  // Position on the raft -> grid spot
+  function localToGrid(x, z) {
     return {
-      gx: Math.round(localX / TILE_SIZE + 0.5),
-      gz: Math.round(localZ / TILE_SIZE + 0.5),
+      gx: Math.round(x / TILE_SIZE + 0.5),
+      gz: Math.round(z / TILE_SIZE + 0.5),
     };
+  }
+
+  // Point in the world -> grid spot (subtract where the raft is first)
+  function worldToGrid(p) {
+    return localToGrid(p.x - group.position.x, p.z - group.position.z);
+  }
+
+  // Is there a tile at this spot on the raft? (the character uses this to not walk off)
+  function hasTileAt(x, z) {
+    const { gx, gz } = localToGrid(x, z);
+    return tiles.has(`${gx},${gz}`);
+  }
+
+  function closestTileCenter(x, z) {
+    let best = null;
+    let bestDist = Infinity;
+    for (const tile of tiles.values()) {
+      const d = Math.hypot(tile.position.x - x, tile.position.z - z);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { x: tile.position.x, z: tile.position.z };
+      }
+    }
+    return best;
+  }
+
+  // The balance point of the raft (average of all tile positions)
+  function centerOfMass() {
+    let sx = 0;
+    let sz = 0;
+    for (const tile of tiles.values()) {
+      sx += tile.position.x;
+      sz += tile.position.z;
+    }
+    const n = Math.max(tiles.size, 1);
+    return { x: sx / n, z: sz / n };
   }
 
   function addTile(gx, gz) {
@@ -81,13 +121,18 @@ export function createRaft(scene) {
     return !tiles.has(`${gx},${gz}`) && isNextToRaft(gx, gz);
   }
 
-  // steer is -1 (left), 0 (nothing), or 1 (right)
-  function update(dt, t, steer) {
+  // charPos = where the character stands on the raft
+  function update(dt, t, charPos) {
+    // How far he is from the balance point decides the lean (-1 to 1)
+    const com = centerOfMass();
+    const leanX = deadzone(clamp((charPos.x - com.x) / TILE_SIZE, -1, 1));
+    const leanZ = clamp((charPos.z - com.z) / TILE_SIZE, -1, 1);
+
     // Bigger raft = lower top speed
     const extraTiles = Math.max(0, tiles.size - 4);
     const maxSpeed = STEER_MAX_SPEED / (1 + extraTiles * SIZE_SLOWDOWN);
 
-    velocityX += steer * STEER_ACCEL * dt; // push
+    velocityX += leanX * STEER_ACCEL * dt; // leaning pushes it
     velocityX -= velocityX * STEER_DRAG * dt; // water slows it down
     velocityX = clamp(velocityX, -maxSpeed, maxSpeed);
 
@@ -99,10 +144,10 @@ export function createRaft(scene) {
       velocityX = 0;
     }
 
-    // Ride the waves, and lean into turns a little
+    // Ride the waves, and dip toward the side he's standing on
     group.position.y = waveHeight(group.position.x, 0, t) + 0.15;
-    group.rotation.x = Math.sin(t * 0.9) * 0.04;
-    group.rotation.z = Math.cos(t * 1.2) * 0.04 - velocityX * 0.015;
+    group.rotation.x = Math.sin(t * 0.9) * 0.04 + leanZ * 0.05;
+    group.rotation.z = Math.cos(t * 1.2) * 0.04 - leanX * 0.07;
 
     center.x = group.position.x;
     center.y = group.position.y + 0.3;
@@ -114,5 +159,16 @@ export function createRaft(scene) {
   addTile(0, 1);
   addTile(1, 1);
 
-  return { group, tiles, center, addTile, gridToLocal, worldToGrid, canBuildAt, update };
+  return {
+    group,
+    tiles,
+    center,
+    addTile,
+    gridToLocal,
+    worldToGrid,
+    hasTileAt,
+    closestTileCenter,
+    canBuildAt,
+    update,
+  };
 }

@@ -4,12 +4,14 @@ import { TILE_COST, JOURNEY_TIME } from './config.js';
 import { renderer, scene, camera, followRaft } from './scene.js';
 import { createOcean, waveHeight } from './ocean.js';
 import { createRaft } from './raft.js';
+import { createCharacter } from './character.js';
 import { createDebris } from './debris.js';
 import { createHook } from './hook.js';
 import { createBuilder } from './build.js';
 import { createShark } from './shark.js';
+import { createSpear } from './spear.js';
 import { createIsland } from './island.js';
-import { createHud, createJourneyBar, showEndScreen } from './ui.js';
+import { createHud, createJourneyBar, showToast, showEndScreen } from './ui.js';
 
 // ---------- Game state ----------
 let planks = 0;
@@ -20,6 +22,7 @@ let gameEnded = false;
 // ---------- Create everything ----------
 const ocean = createOcean(scene);
 const raft = createRaft(scene);
+const character = createCharacter(raft);
 const debris = createDebris(scene);
 const builder = createBuilder(raft);
 const shark = createShark(scene, raft.group, raft.tiles, waveHeight);
@@ -27,9 +30,16 @@ const island = createIsland(scene);
 const hud = createHud();
 const journeyBar = createJourneyBar();
 
-const hook = createHook(scene, raft, debris, () => {
+// The hook comes out of the character's hands
+const hook = createHook(scene, character.hand, debris, () => {
   planks++;
   refreshHud();
+});
+
+const spear = createSpear(scene, raft, shark, (result) => {
+  if (result === 'scared') showToast('Hit! The shark swam off... for now');
+  if (result === 'killed') showToast('Shark down! Another one will come');
+  if (result === 'miss') showToast('Missed. Wait till it gets close');
 });
 
 function refreshHud() {
@@ -79,11 +89,17 @@ const keysDown = new Set();
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   keysDown.add(key);
+  if (gameEnded) return;
 
   if (key === 'b' && !e.repeat) {
     buildMode = !buildMode;
     builder.hide();
     refreshHud();
+  }
+
+  if (key === ' ' && !e.repeat) {
+    e.preventDefault(); // stop Space from scrolling the page
+    spear.stab();
   }
 });
 
@@ -94,12 +110,15 @@ window.addEventListener('keyup', (e) => {
 // If you click away from the window, let go of all keys
 window.addEventListener('blur', () => keysDown.clear());
 
-// -1 = left, 1 = right, 0 = nothing (or both held)
-function getSteer() {
-  let steer = 0;
-  if (keysDown.has('a') || keysDown.has('arrowleft')) steer -= 1;
-  if (keysDown.has('d') || keysDown.has('arrowright')) steer += 1;
-  return steer;
+// Which way WASD / arrows are pushing. W is "up the screen" = away from the camera.
+function getMoveInput() {
+  const input = { x: 0, z: 0 };
+  if (gameEnded) return input;
+  if (keysDown.has('a') || keysDown.has('arrowleft')) input.x -= 1;
+  if (keysDown.has('d') || keysDown.has('arrowright')) input.x += 1;
+  if (keysDown.has('w') || keysDown.has('arrowup')) input.z -= 1;
+  if (keysDown.has('s') || keysDown.has('arrowdown')) input.z += 1;
+  return input;
 }
 
 // ---------- Game loop ----------
@@ -112,10 +131,12 @@ function animate() {
   const t = now / 1000;
 
   ocean.update(t);
-  raft.update(dt, t, gameEnded ? 0 : getSteer());
+  raft.update(dt, t, character.position); // raft leans based on where he stands
+  character.update(dt, t, getMoveInput());
   followRaft(raft.group.position.x, dt);
   debris.update(dt, t, raft.group.position.x);
   hook.update(dt);
+  spear.update(dt);
 
   if (!gameEnded) {
     shark.update(dt, t);

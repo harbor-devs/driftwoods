@@ -3,10 +3,16 @@ import * as THREE from 'three';
 // ---------- Shark settings ----------
 const CIRCLE_RADIUS = 9; // how far from the raft it circles
 const CIRCLE_SPEED = 0.35; // how fast it goes around
-const SWIM_SPEED = 6; // speed when attacking
+const SWIM_SPEED = 7.5; // faster than the raft, so you can't outrun it forever
 const BITE_TIME = 2; // seconds it chews before the tile is gone
 const BITE_ESCAPE = 2.5; // if the tile gets this far away, the bite is cancelled
 const FIRST_ATTACK = 15; // seconds before the first attack
+const MAX_HEALTH = 3; // spear hits to kill it
+const FLEE_TIME = 3; // seconds it swims away after getting hit
+const AWAY_MIN = 15; // min seconds it stays away after being scared
+const AWAY_MAX = 25; // max seconds it stays away
+const RESPAWN_TIME = 40; // seconds until a new shark comes after one dies
+const ANGER_PER_LEVEL = 0.15; // each new shark is 15% faster
 
 function randomBetween(min, max) {
   return min + Math.random() * (max - min);
@@ -40,22 +46,32 @@ export function createShark(scene, raft, tiles, waveHeight) {
   scene.add(shark);
 
   // ---------- State ----------
-  // state can be: 'circling', 'attacking', 'biting'
+  // state can be: 'circling', 'attacking', 'biting', 'fleeing', 'away', 'dead'
   let state = 'circling';
-  let angle = Math.random() * Math.PI * 2;
+  let angle = 0;
   let attackTimer = FIRST_ATTACK;
   let biteTimer = 0;
+  let timer = 0; // used by fleeing, away and dead
   let target = null; // { key, tile }
+  let health = MAX_HEALTH;
+  let level = 0; // goes up every time a new shark spawns
+  let flashTimer = 0;
 
   const pos = shark.position;
   const goal = new THREE.Vector3();
   const lookPoint = new THREE.Vector3();
 
-  pos.set(
-    raft.position.x + Math.cos(angle) * CIRCLE_RADIUS,
-    0,
-    Math.sin(angle) * CIRCLE_RADIUS
-  );
+  function speed() {
+    return SWIM_SPEED * (1 + level * ANGER_PER_LEVEL);
+  }
+
+  // Put the shark somewhere out around the raft
+  function placeOnCircle(radius) {
+    angle = Math.random() * Math.PI * 2;
+    pos.set(raft.position.x + Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+  }
+
+  placeOnCircle(CIRCLE_RADIUS);
 
   // Where a tile actually is in the world (the raft can move)
   function tileWorld(tile) {
@@ -63,12 +79,12 @@ export function createShark(scene, raft, tiles, waveHeight) {
   }
 
   // Turn toward a point and swim forward
-  function swimTowards(point, speed, dt) {
+  function swimTowards(point, swimSpeed, dt) {
     const d = distXZ(pos, point);
     if (d < 0.01) return;
     lookPoint.set(point.x, pos.y, point.z);
     shark.lookAt(lookPoint);
-    shark.translateZ(Math.min(speed * dt, d));
+    shark.translateZ(Math.min(swimSpeed * dt, d));
   }
 
   // An edge tile = a tile with at least one empty side. Pick the closest one.
@@ -92,14 +108,54 @@ export function createShark(scene, raft, tiles, waveHeight) {
     return best;
   }
 
-  function backToCircling() {
+  function releaseTarget() {
+    if (target) target.tile.rotation.y = 0; // stop the shaking
     target = null;
+  }
+
+  function backToCircling() {
+    releaseTarget();
     state = 'circling';
     attackTimer = randomBetween(8, 12);
   }
 
+  // ---------- Called by the spear ----------
+  // Returns 'scared', 'killed', or null (if it can't be hit right now)
+  function hit() {
+    if (state === 'fleeing' || state === 'away' || state === 'dead') return null;
+
+    releaseTarget();
+    health -= 1;
+
+    // Flash red
+    skin.emissive.setHex(0xff3333);
+    flashTimer = 0.25;
+
+    if (health <= 0) {
+      state = 'dead';
+      timer = RESPAWN_TIME;
+      return 'killed';
+    }
+
+    state = 'fleeing';
+    timer = FLEE_TIME;
+    return 'scared';
+  }
+
+  // Is the shark close to a point (and actually in the water to hit)?
+  function isNear(point, range) {
+    if (state === 'fleeing' || state === 'away' || state === 'dead') return false;
+    return distXZ(pos, point) < range;
+  }
+
   // ---------- Runs every frame ----------
   function update(dt, t) {
+    // Red flash fades back to normal
+    if (flashTimer > 0) {
+      flashTimer -= dt;
+      if (flashTimer <= 0) skin.emissive.setHex(0x000000);
+    }
+
     if (state === 'circling') {
       angle += CIRCLE_SPEED * dt;
       goal.set(
@@ -107,7 +163,7 @@ export function createShark(scene, raft, tiles, waveHeight) {
         0,
         Math.sin(angle) * CIRCLE_RADIUS
       );
-      swimTowards(goal, SWIM_SPEED * 0.6, dt);
+      swimTowards(goal, speed() * 0.8, dt);
 
       attackTimer -= dt;
       if (attackTimer <= 0 && tiles.size > 0) {
@@ -120,7 +176,7 @@ export function createShark(scene, raft, tiles, waveHeight) {
       } else {
         const w = tileWorld(target.tile);
         goal.set(w.x, 0, w.z);
-        swimTowards(goal, SWIM_SPEED, dt);
+        swimTowards(goal, speed(), dt);
         if (distXZ(pos, goal) < 1.5) {
           state = 'biting';
           biteTimer = BITE_TIME;
@@ -134,7 +190,7 @@ export function createShark(scene, raft, tiles, waveHeight) {
         goal.set(w.x, 0, w.z);
 
         if (distXZ(pos, goal) > BITE_ESCAPE) {
-          // The raft got away, chase it again
+          // The raft pulled away, chase it again
           target.tile.rotation.y = 0;
           state = 'attacking';
         } else {
@@ -144,15 +200,58 @@ export function createShark(scene, raft, tiles, waveHeight) {
           if (biteTimer <= 0) {
             raft.remove(target.tile);
             tiles.delete(target.key);
+            target = null;
             backToCircling();
           }
         }
       }
+    } else if (state === 'fleeing') {
+      // Swim straight away from the raft
+      const dx = pos.x - raft.position.x;
+      const dz = pos.z - raft.position.z;
+      const len = Math.sqrt(dx * dx + dz * dz) || 1;
+      goal.set(pos.x + (dx / len) * 10, 0, pos.z + (dz / len) * 10);
+      swimTowards(goal, speed() * 1.3, dt);
+
+      timer -= dt;
+      if (timer <= 0) {
+        state = 'away';
+        shark.visible = false;
+        timer = randomBetween(AWAY_MIN, AWAY_MAX);
+      }
+    } else if (state === 'away') {
+      timer -= dt;
+      if (timer <= 0) {
+        // It's back, and it attacks quickly this time
+        placeOnCircle(CIRCLE_RADIUS * 1.6);
+        shark.visible = true;
+        state = 'circling';
+        attackTimer = 4;
+      }
+    } else if (state === 'dead') {
+      timer -= dt;
+
+      // Flip belly up and sink
+      shark.rotation.z = Math.min(shark.rotation.z + dt * 2, Math.PI);
+      pos.y -= dt * 0.8;
+      if (timer < RESPAWN_TIME - 3) shark.visible = false;
+
+      if (timer <= 0) {
+        // A new, angrier shark arrives
+        level += 1;
+        health = MAX_HEALTH;
+        shark.rotation.set(0, 0, 0);
+        placeOnCircle(CIRCLE_RADIUS * 1.6);
+        shark.visible = true;
+        state = 'circling';
+        attackTimer = 8;
+      }
+      return; // skip the wave height below so it keeps sinking
     }
 
     // Stay just under the surface so only the fin pokes out
     pos.y = waveHeight(pos.x, pos.z, t) - 0.35;
   }
 
-  return { update };
+  return { update, hit, isNear, position: pos };
 }
