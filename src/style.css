@@ -6,9 +6,10 @@ body {
   background: #9fd8ef;
 }
 
+/* Custom yellow plus cursor with a dark outline, so it shows up on the water */
 canvas {
   display: block;
-  cursor: crosshair;
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><path d='M12 3v18M3 12h18' stroke='%232b3a42' stroke-width='5' stroke-linecap='round'/><path d='M12 3v18M3 12h18' stroke='%23ffd27a' stroke-width='2.5' stroke-linecap='round'/></svg>") 12 12, crosshair;
 }
 
 #hud {
@@ -125,19 +126,6 @@ canvas {
   transform: translateX(-50%) translateY(0);
 }
 
-#crosshair {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  width: 8px;
-  height: 8px;
-  margin: -4px 0 0 -4px;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
-  pointer-events: none;
-}
-
 /* ---------- Shark warning banner ---------- */
 #shark-warning {
   position: fixed;
@@ -147,6 +135,7 @@ canvas {
   padding: 6px 18px;
   background: rgba(190, 35, 35, 0.9);
   color: #fff;
+  font-family: system-ui, sans-serif;
   font-weight: 800;
   font-size: 18px;
   letter-spacing: 3px;
