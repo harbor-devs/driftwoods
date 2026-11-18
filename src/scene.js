@@ -34,6 +34,18 @@ sun.shadow.camera.right = 15;
 sun.shadow.camera.top = 15;
 sun.shadow.camera.bottom = -15;
 scene.add(sun);
+scene.add(sun.target); // needed so we can move where the sun points
+
+// Camera follows the raft sideways, but a little behind, so you can SEE the raft move.
+// The sun follows exactly, so shadows stay sharp around the raft.
+export function followRaft(x, dt) {
+  const smooth = 1 - Math.exp(-2.5 * dt); // smaller number = lazier camera
+  camera.position.x += (x - camera.position.x) * smooth;
+  camera.lookAt(camera.position.x, 0, 0);
+
+  sun.position.x = x + 10;
+  sun.target.position.x = x;
+}
 
 // ---------- Keep it fullscreen when the window resizes ----------
 window.addEventListener('resize', () => {

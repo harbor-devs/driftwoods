@@ -9,7 +9,7 @@ export function createHud() {
   function update(planks, buildMode) {
     const hint = buildMode
       ? `BUILD MODE: click next to your raft to add a tile (${TILE_COST} planks). Press B to stop building`
-      : 'Click the water to throw your hook. Press B to build';
+      : 'A / D to steer. Click the water to throw your hook. Press B to build';
     el.innerHTML = `
       <div class="count">Planks: ${planks}</div>
       <div class="hint">${hint}</div>

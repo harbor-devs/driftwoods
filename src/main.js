@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import './style.css';
 import { TILE_COST, JOURNEY_TIME } from './config.js';
-import { renderer, scene, camera } from './scene.js';
+import { renderer, scene, camera, followRaft } from './scene.js';
 import { createOcean, waveHeight } from './ocean.js';
 import { createRaft } from './raft.js';
 import { createDebris } from './debris.js';
@@ -37,7 +37,7 @@ function refreshHud() {
 }
 refreshHud();
 
-// ---------- Input ----------
+// ---------- Mouse ----------
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 const waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -72,13 +72,35 @@ window.addEventListener('pointerdown', (e) => {
   if (p) hook.throwAt(p);
 });
 
+// ---------- Keyboard ----------
+// We keep a list of keys that are held down right now
+const keysDown = new Set();
+
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'b' || e.key === 'B') {
+  const key = e.key.toLowerCase();
+  keysDown.add(key);
+
+  if (key === 'b' && !e.repeat) {
     buildMode = !buildMode;
     builder.hide();
     refreshHud();
   }
 });
+
+window.addEventListener('keyup', (e) => {
+  keysDown.delete(e.key.toLowerCase());
+});
+
+// If you click away from the window, let go of all keys
+window.addEventListener('blur', () => keysDown.clear());
+
+// -1 = left, 1 = right, 0 = nothing (or both held)
+function getSteer() {
+  let steer = 0;
+  if (keysDown.has('a') || keysDown.has('arrowleft')) steer -= 1;
+  if (keysDown.has('d') || keysDown.has('arrowright')) steer += 1;
+  return steer;
+}
 
 // ---------- Game loop ----------
 let lastTime = performance.now();
@@ -90,8 +112,9 @@ function animate() {
   const t = now / 1000;
 
   ocean.update(t);
-  raft.update(t);
-  debris.update(dt, t);
+  raft.update(dt, t, gameEnded ? 0 : getSteer());
+  followRaft(raft.group.position.x, dt);
+  debris.update(dt, t, raft.group.position.x);
   hook.update(dt);
 
   if (!gameEnded) {

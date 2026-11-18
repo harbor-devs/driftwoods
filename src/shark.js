@@ -5,6 +5,7 @@ const CIRCLE_RADIUS = 9; // how far from the raft it circles
 const CIRCLE_SPEED = 0.35; // how fast it goes around
 const SWIM_SPEED = 6; // speed when attacking
 const BITE_TIME = 2; // seconds it chews before the tile is gone
+const BITE_ESCAPE = 2.5; // if the tile gets this far away, the bite is cancelled
 const FIRST_ATTACK = 15; // seconds before the first attack
 
 function randomBetween(min, max) {
@@ -50,7 +51,16 @@ export function createShark(scene, raft, tiles, waveHeight) {
   const goal = new THREE.Vector3();
   const lookPoint = new THREE.Vector3();
 
-  pos.set(Math.cos(angle) * CIRCLE_RADIUS, 0, Math.sin(angle) * CIRCLE_RADIUS);
+  pos.set(
+    raft.position.x + Math.cos(angle) * CIRCLE_RADIUS,
+    0,
+    Math.sin(angle) * CIRCLE_RADIUS
+  );
+
+  // Where a tile actually is in the world (the raft can move)
+  function tileWorld(tile) {
+    return { x: raft.position.x + tile.position.x, z: raft.position.z + tile.position.z };
+  }
 
   // Turn toward a point and swim forward
   function swimTowards(point, speed, dt) {
@@ -73,7 +83,7 @@ export function createShark(scene, raft, tiles, waveHeight) {
         !tiles.has(`${gx},${gz + 1}`) ||
         !tiles.has(`${gx},${gz - 1}`);
       if (!isEdge) continue;
-      const d = distXZ(pos, tile.position);
+      const d = distXZ(pos, tileWorld(tile));
       if (d < bestDist) {
         bestDist = d;
         best = { key, tile };
@@ -92,7 +102,11 @@ export function createShark(scene, raft, tiles, waveHeight) {
   function update(dt, t) {
     if (state === 'circling') {
       angle += CIRCLE_SPEED * dt;
-      goal.set(Math.cos(angle) * CIRCLE_RADIUS, 0, Math.sin(angle) * CIRCLE_RADIUS);
+      goal.set(
+        raft.position.x + Math.cos(angle) * CIRCLE_RADIUS,
+        0,
+        Math.sin(angle) * CIRCLE_RADIUS
+      );
       swimTowards(goal, SWIM_SPEED * 0.6, dt);
 
       attackTimer -= dt;
@@ -104,7 +118,8 @@ export function createShark(scene, raft, tiles, waveHeight) {
       if (!tiles.has(target.key)) {
         backToCircling();
       } else {
-        goal.set(target.tile.position.x, 0, target.tile.position.z);
+        const w = tileWorld(target.tile);
+        goal.set(w.x, 0, w.z);
         swimTowards(goal, SWIM_SPEED, dt);
         if (distXZ(pos, goal) < 1.5) {
           state = 'biting';
@@ -112,13 +127,26 @@ export function createShark(scene, raft, tiles, waveHeight) {
         }
       }
     } else if (state === 'biting') {
-      biteTimer -= dt;
-      target.tile.rotation.y = Math.sin(t * 40) * 0.08; // tile shakes
-
-      if (biteTimer <= 0) {
-        raft.remove(target.tile);
-        tiles.delete(target.key);
+      if (!tiles.has(target.key)) {
         backToCircling();
+      } else {
+        const w = tileWorld(target.tile);
+        goal.set(w.x, 0, w.z);
+
+        if (distXZ(pos, goal) > BITE_ESCAPE) {
+          // The raft got away, chase it again
+          target.tile.rotation.y = 0;
+          state = 'attacking';
+        } else {
+          biteTimer -= dt;
+          target.tile.rotation.y = Math.sin(t * 40) * 0.08; // tile shakes
+
+          if (biteTimer <= 0) {
+            raft.remove(target.tile);
+            tiles.delete(target.key);
+            backToCircling();
+          }
+        }
       }
     }
 
