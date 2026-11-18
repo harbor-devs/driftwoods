@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
 // ---------- Oar settings ----------
-const SWING_TIME = 0.45; // whole swing: wind up, slam, hold, recover
-const COOLDOWN = 0.7; // seconds between swings
+const SWING_TIME = 0.4; // whole swing: wind up, slam, hold, recover
+const COOLDOWN = 0.4; // seconds before the next swing can start
 const HIT_RADIUS = 2; // shark must be this close to where the blade lands
 
 // Angles the oar goes through (rotation around his shoulder)
@@ -88,15 +88,23 @@ export function createOar(scene, character, shark, onHit) {
   let cooldown = 0;
   let swingTime = 0; // time left in the current swing
   let hasImpacted = false;
+  let queuedAngle = null; // a click that came in mid-swing, waiting its turn
   const impact = new THREE.Vector3();
 
-  // angle = which way to face for the slam, in world space
-  function swingAt(angle) {
-    if (cooldown > 0) return;
+  function startSwing(angle) {
     cooldown = COOLDOWN;
     swingTime = SWING_TIME;
     hasImpacted = false;
     character.faceDirection(angle, SWING_TIME);
+  }
+
+  // angle = which way to slam, in world space
+  function swingAt(angle) {
+    if (cooldown > 0) {
+      queuedAngle = angle; // remember it, swing as soon as we can
+      return;
+    }
+    startSwing(angle);
   }
 
   // The moment the blade hits the water
@@ -119,6 +127,13 @@ export function createOar(scene, character, shark, onHit) {
   function update(dt) {
     cooldown = Math.max(0, cooldown - dt);
     updateDrops(dt);
+
+    // Ready again and a click is waiting? Go.
+    if (cooldown <= 0 && queuedAngle !== null) {
+      const angle = queuedAngle;
+      queuedAngle = null;
+      startSwing(angle);
+    }
 
     if (swingTime <= 0) return;
     swingTime -= dt;

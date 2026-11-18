@@ -6,18 +6,10 @@ export function createHud() {
   el.id = 'hud';
   document.body.appendChild(el);
 
-  function update(planks, buildMode, cameraMode, locked) {
-    let hint;
-    if (buildMode) {
-      hint = `BUILD MODE: aim next to your raft and click to add a tile (${TILE_COST} planks). B to stop building`;
-    } else if (cameraMode === 'first' && !locked) {
-      hint = 'Click the game to look around';
-    } else if (cameraMode === 'first') {
-      hint = 'Mouse: look. WASD: walk. Left click: hook. Right click or Space: oar. B: build. V: top view. Esc: free mouse';
-    } else {
-      hint = 'WASD walk (lean to steer). Left click: hook. Right click or Space: oar. B: build. V: first person';
-    }
-
+  function update(planks, buildMode) {
+    const hint = buildMode
+      ? `BUILD MODE: click next to your raft to add a tile (${TILE_COST} planks). B to stop building`
+      : 'WASD walk (lean to steer). Left click: hook. Right click or Space: oar. B: build';
     el.innerHTML = `
       <div class="count">Planks: ${planks}</div>
       <div class="hint">${hint}</div>
@@ -25,20 +17,6 @@ export function createHud() {
   }
 
   return { update };
-}
-
-// ---------- Crosshair (first person only) ----------
-export function createCrosshair() {
-  const el = document.createElement('div');
-  el.id = 'crosshair';
-  document.body.appendChild(el);
-
-  function show(visible) {
-    el.style.display = visible ? 'block' : 'none';
-  }
-  show(false);
-
-  return { show };
 }
 
 // ---------- Journey bar (top middle) ----------

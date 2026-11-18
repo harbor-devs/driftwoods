@@ -1,24 +1,17 @@
 import * as THREE from 'three';
 import './style.css';
 import { TILE_COST, JOURNEY_TIME } from './config.js';
-import { renderer, scene, camera } from './scene.js';
+import { renderer, scene, camera, followRaft } from './scene.js';
 import { createOcean, waveHeight } from './ocean.js';
 import { createRaft } from './raft.js';
 import { createCharacter } from './character.js';
-import { createCameraController } from './camera.js';
 import { createDebris } from './debris.js';
 import { createHook } from './hook.js';
 import { createBuilder } from './build.js';
 import { createShark } from './shark.js';
 import { createOar } from './oar.js';
 import { createIsland } from './island.js';
-import {
-  createHud,
-  createCrosshair,
-  createJourneyBar,
-  showToast,
-  showEndScreen,
-} from './ui.js';
+import { createHud, createJourneyBar, showToast, showEndScreen } from './ui.js';
 
 // ---------- Game state ----------
 let planks = 0;
@@ -30,13 +23,11 @@ let gameEnded = false;
 const ocean = createOcean(scene);
 const raft = createRaft(scene);
 const character = createCharacter(raft);
-const camCtrl = createCameraController(character, raft);
 const debris = createDebris(scene);
 const builder = createBuilder(raft);
 const shark = createShark(scene, raft.group, raft.tiles, waveHeight);
 const island = createIsland(scene);
 const hud = createHud();
-const crosshair = createCrosshair();
 const journeyBar = createJourneyBar();
 
 // The hook comes out of the character's hands
@@ -51,57 +42,41 @@ const oar = createOar(scene, character, shark, (result) => {
 });
 
 function refreshHud() {
-  hud.update(planks, buildMode, camCtrl.mode, camCtrl.isLocked());
+  hud.update(planks, buildMode);
 }
 refreshHud();
 
-// Update the hint when the mouse gets locked or freed (like pressing Esc)
-document.addEventListener('pointerlockchange', refreshHud);
-
 function endGame(title, text) {
   gameEnded = true;
-  if (camCtrl.isLocked()) document.exitPointerLock(); // give the mouse back for the button
-  crosshair.show(false);
   showEndScreen(title, text);
 }
 
-// ---------- Aiming ----------
+// ---------- Mouse ----------
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
-const screenCenter = new THREE.Vector2(0, 0);
 const waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const hitPoint = new THREE.Vector3();
 
-// Where the mouse points on the water (top view uses this for the oar)
+// Where the mouse points on the water right now (the oar aims here)
 const mouseAim = new THREE.Vector3();
 let hasMouseAim = false;
 
-// Top view: aim where the mouse is. First person: aim at the crosshair.
-function getAimPoint(e) {
-  if (camCtrl.mode === 'first' || !e) {
-    raycaster.setFromCamera(screenCenter, camera);
-  } else {
-    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
-  }
-  return raycaster.ray.intersectPlane(waterPlane, hitPoint); // null if looking at the sky
+// Turns the mouse position on screen into a point on the water
+function getWaterPoint(e) {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  return raycaster.ray.intersectPlane(waterPlane, hitPoint);
 }
 
-function swing() {
-  if (camCtrl.mode === 'first') {
-    oar.swingAt(camCtrl.facingAngle()); // swing where you're looking
-    return;
-  }
+function swingTowardMouse() {
   if (!hasMouseAim) return;
   const me = character.worldPos;
   oar.swingAt(Math.atan2(mouseAim.x - me.x, mouseAim.z - me.z));
 }
 
-// ---------- Mouse ----------
 window.addEventListener('pointermove', (e) => {
-  if (camCtrl.mode === 'first') return; // first person aims with the crosshair instead
-  const p = getAimPoint(e);
+  const p = getWaterPoint(e);
   if (!p) return;
   mouseAim.copy(p);
   hasMouseAim = true;
@@ -114,21 +89,15 @@ window.addEventListener('contextmenu', (e) => e.preventDefault());
 window.addEventListener('pointerdown', (e) => {
   if (gameEnded) return;
 
-  // First person but mouse not grabbed yet: this click just grabs it
-  if (camCtrl.mode === 'first' && !camCtrl.isLocked()) {
-    camCtrl.requestLock();
-    return;
-  }
-
-  const p = getAimPoint(e);
-  if (p && camCtrl.mode === 'top') {
+  const p = getWaterPoint(e);
+  if (p) {
     mouseAim.copy(p);
     hasMouseAim = true;
   }
 
   // Right click = swing the oar
   if (e.button === 2) {
-    swing();
+    swingTowardMouse();
     return;
   }
 
@@ -161,17 +130,9 @@ window.addEventListener('keydown', (e) => {
     refreshHud();
   }
 
-  if (key === 'v' && !e.repeat) {
-    const mode = camCtrl.toggle();
-    crosshair.show(mode === 'first');
-    builder.hide();
-    showToast(mode === 'first' ? 'First person. Esc frees the mouse' : 'Top view');
-    refreshHud();
-  }
-
   if (key === ' ' && !e.repeat) {
     e.preventDefault(); // stop Space from scrolling the page
-    swing();
+    swingTowardMouse();
   }
 });
 
@@ -182,7 +143,7 @@ window.addEventListener('keyup', (e) => {
 // If you click away from the window, let go of all keys
 window.addEventListener('blur', () => keysDown.clear());
 
-// Raw WASD / arrows, then turned into the right direction for the current camera
+// Which way WASD / arrows are pushing. W is "up the screen" = away from the camera.
 function getMoveInput() {
   const input = { x: 0, z: 0 };
   if (gameEnded) return input;
@@ -190,7 +151,7 @@ function getMoveInput() {
   if (keysDown.has('d') || keysDown.has('arrowright')) input.x += 1;
   if (keysDown.has('w') || keysDown.has('arrowup')) input.z -= 1;
   if (keysDown.has('s') || keysDown.has('arrowdown')) input.z += 1;
-  return camCtrl.moveInput(input);
+  return input;
 }
 
 // ---------- Game loop ----------
@@ -205,15 +166,7 @@ function animate() {
   ocean.update(t);
   raft.update(dt, t, character.position); // raft leans based on where he stands
   character.update(dt, t, getMoveInput());
-  camCtrl.update(dt);
-
-  // First person build mode: ghost tile follows the crosshair
-  if (buildMode && camCtrl.mode === 'first') {
-    const p = getAimPoint();
-    if (p) builder.hover(p, planks >= TILE_COST);
-    else builder.hide();
-  }
-
+  followRaft(raft.group.position.x, dt);
   debris.update(dt, t, raft.group.position.x);
   hook.update(dt);
   oar.update(dt);
