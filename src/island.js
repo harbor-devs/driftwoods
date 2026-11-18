@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 
 const START_Z = -95; // far away, hidden in the fog
-const END_Z = -16; // right in front of the raft
+const END_Z = -16; // stops right in front of the raft
+const APPROACH_SPEED = 3; // how fast it comes in once the map is complete
 
 export function createIsland(scene) {
   const island = new THREE.Group();
@@ -40,12 +41,31 @@ export function createIsland(scene) {
   addPalm(-5, 4, 2.8);
 
   island.position.set(0, -0.3, START_Z);
+  island.visible = false; // hidden until the map is complete
   scene.add(island);
 
-  // progress goes from 0 (start) to 1 (arrived)
-  function update(progress) {
-    island.position.z = START_Z + (END_Z - START_Z) * progress;
+  // state can be: 'hidden', 'coming', 'arrived'
+  let state = 'hidden';
+
+  // Show the island far away at this x (left or right of the raft)
+  function reveal(x) {
+    island.position.set(x, -0.3, START_Z);
+    island.visible = true;
+    state = 'coming';
   }
 
-  return { update };
+  function update(dt) {
+    if (state !== 'coming') return;
+    island.position.z += APPROACH_SPEED * dt;
+    if (island.position.z >= END_Z) {
+      island.position.z = END_Z;
+      state = 'arrived';
+    }
+  }
+
+  function isArrived() {
+    return state === 'arrived';
+  }
+
+  return { reveal, update, isArrived, position: island.position };
 }

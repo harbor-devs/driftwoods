@@ -19,25 +19,30 @@ export function createHud() {
   return { update };
 }
 
-// ---------- Journey bar (top middle) ----------
-export function createJourneyBar() {
+// ---------- Map pieces bar (top middle) ----------
+export function createMapBar(total) {
   const el = document.createElement('div');
   el.id = 'journey';
   el.innerHTML = `
-    <div class="label">Island</div>
-    <div class="bar"><div class="fill"></div></div>
+    <div class="label"></div>
+    <div class="slots">${'<div class="slot"></div>'.repeat(total)}</div>
   `;
   document.body.appendChild(el);
-  const fill = el.querySelector('.fill');
 
-  function set(progress) {
-    fill.style.width = `${progress * 100}%`;
+  const label = el.querySelector('.label');
+  const slots = el.querySelectorAll('.slot');
+
+  function set(count) {
+    label.textContent =
+      count >= total ? 'Map complete! Reach the island' : `Map pieces: ${count} / ${total}`;
+    slots.forEach((slot, i) => slot.classList.toggle('found', i < count));
   }
 
+  set(0);
   return { set };
 }
 
-// ---------- Shark warning (top middle, under the journey bar) ----------
+// ---------- Shark warning (top middle, under the map bar) ----------
 export function createSharkWarning() {
   const el = document.createElement('div');
   el.id = 'shark-warning';
@@ -70,7 +75,7 @@ export function showToast(text) {
   el.classList.add('show');
 
   clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => el.classList.remove('show'), 1800);
+  toastTimeout = setTimeout(() => el.classList.remove('show'), 2200);
 }
 
 // ---------- Win / lose screen ----------

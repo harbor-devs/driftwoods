@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
-import { TILE_COST, JOURNEY_TIME } from './config.js';
+import { TILE_COST, WORLD_LIMIT } from './config.js';
 import { renderer, scene, camera, followRaft, shakeCamera } from './scene.js';
 import { createOcean, waveHeight } from './ocean.js';
 import { createRaft } from './raft.js';
@@ -13,28 +13,41 @@ import { createOar } from './oar.js';
 import { createIsland } from './island.js';
 import {
   createHud,
-  createJourneyBar,
+  createMapBar,
   createSharkWarning,
   showToast,
   showEndScreen,
 } from './ui.js';
 
+// ---------- Game settings ----------
+const MAP_PIECES = 3; // bottles you need to find
+const DOCK_DISTANCE = 9; // how lined up with the island you must be to land
+
 // ---------- Game state ----------
 let planks = 0;
 let buildMode = false;
-let journeyTime = 0;
+let mapPieces = 0;
 let gameEnded = false;
+let steerHintShown = false;
+
+function sideName(side) {
+  return side < 0 ? 'left' : 'right';
+}
 
 // ---------- Create everything ----------
 const ocean = createOcean(scene);
 const raft = createRaft(scene);
 const character = createCharacter(raft);
-const debris = createDebris(scene);
 const builder = createBuilder(raft);
 const island = createIsland(scene);
 const hud = createHud();
-const journeyBar = createJourneyBar();
+const mapBar = createMapBar(MAP_PIECES);
 const sharkWarning = createSharkWarning();
+
+const debris = createDebris(scene, (event, side) => {
+  if (event === 'bottleSpawned') showToast(`A bottle! Far to your ${sideName(side)}`);
+  if (event === 'bottleMissed') showToast('The bottle drifted away. Another will come');
+});
 
 // The shark tells us what it's doing, and we decide how it feels
 const shark = createShark(scene, raft.group, raft.tiles, waveHeight, (event) => {
@@ -46,9 +59,12 @@ const shark = createShark(scene, raft.group, raft.tiles, waveHeight, (event) => 
 });
 
 // The hook comes out of the character's hands
-const hook = createHook(scene, character.hand, debris, () => {
-  planks++;
-  refreshHud();
+const hook = createHook(scene, character.hand, debris, (kind) => {
+  if (kind === 'plank') {
+    planks++;
+    refreshHud();
+  }
+  if (kind === 'bottle') foundMapPiece();
 });
 
 const oar = createOar(scene, character, shark, (result) => {
@@ -61,6 +77,28 @@ const oar = createOar(scene, character, shark, (result) => {
     showToast('Shark down! Another one will come');
   }
 });
+
+function foundMapPiece() {
+  mapPieces++;
+  mapBar.set(mapPieces);
+
+  if (mapPieces < MAP_PIECES) {
+    showToast(`Map piece ${mapPieces} of ${MAP_PIECES}!`);
+    return;
+  }
+
+  // Map complete: the island shows up off to one side
+  debris.stopBottles();
+  const raftX = raft.group.position.x;
+  let side = Math.random() < 0.5 ? -1 : 1;
+  let x = raftX + side * (10 + Math.random() * 6);
+  if (Math.abs(x) > WORLD_LIMIT - 10) {
+    side = -side;
+    x = raftX + side * (10 + Math.random() * 6);
+  }
+  island.reveal(x);
+  showToast(`Map complete! Land is to your ${sideName(side)}`);
+}
 
 function refreshHud() {
   hud.update(planks, buildMode);
@@ -185,32 +223,34 @@ function animate() {
   lastTime = now;
   const t = now / 1000;
 
+  const raftX = raft.group.position.x;
+
   ocean.update(t);
   raft.update(dt, t, character.position); // raft leans based on where he stands
   character.update(dt, t, getMoveInput());
-  followRaft(raft.group.position.x, dt);
-  debris.update(dt, t, raft.group.position.x);
+  followRaft(raftX, dt);
+  debris.update(dt, t, raftX);
   hook.update(dt);
   oar.update(dt);
 
   if (!gameEnded) {
     shark.update(dt, t);
     sharkWarning.set(shark.isThreat());
-
-    journeyTime += dt;
-    const progress = Math.min(journeyTime / JOURNEY_TIME, 1);
-    journeyBar.set(progress);
-    island.update(progress);
-
-    if (progress > 0.85) debris.stopSpawning(); // no new planks near the island
+    island.update(dt);
 
     if (raft.tiles.size === 0) {
       endGame('Your raft is gone', 'The shark won this time.');
-    } else if (progress >= 1) {
-      endGame(
-        'You made it!',
-        `You reached the island with ${raft.tiles.size} tiles left. Island update coming soon.`
-      );
+    } else if (island.isArrived()) {
+      const linedUp = Math.abs(raftX - island.position.x) < DOCK_DISTANCE;
+      if (linedUp) {
+        endGame(
+          'You made it!',
+          `You found the map and reached the island with ${raft.tiles.size} tiles left.`
+        );
+      } else if (!steerHintShown) {
+        showToast('Steer over to the island!');
+        steerHintShown = true;
+      }
     }
   }
 

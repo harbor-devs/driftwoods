@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { HOOK_SPEED, HOOK_RANGE, CATCH_RADIUS } from './config.js';
 
+const HOOK_SCALE = 1.5; // make the hook bigger so you can see it from the top camera
+const HOOK_HEIGHT = 1.2; // how high above the water it flies
+const CARRY_DROP = 0.8; // caught things hang this far below the hook's eye
+
 // Moves "current" toward "target" by at most "maxStep"
 function moveTowards(current, target, maxStep) {
   const diff = target.clone().sub(current);
@@ -12,14 +16,54 @@ function moveTowards(current, target, maxStep) {
   current.add(diff.multiplyScalar(maxStep / dist));
 }
 
-// origin = where the hook is thrown from and comes back to (the character's hands)
-// onCatch runs every time a piece of debris reaches him
-export function createHook(scene, origin, debris, onCatch) {
-  const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.25, 8, 6),
-    new THREE.MeshStandardMaterial({ color: 0x555555, flatShading: true })
+// ---------- A real fishhook shape ----------
+// The group's center is the eye (where the rope ties on). The hook hangs down from it.
+function makeHookMesh() {
+  const metal = new THREE.MeshStandardMaterial({
+    color: 0xc9d1d8,
+    metalness: 0.5,
+    roughness: 0.35,
+    flatShading: true,
+  });
+  const hook = new THREE.Group();
+
+  // Eye: small ring at the top
+  const eye = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.025, 6, 10), metal);
+  hook.add(eye);
+
+  // Shank: the straight rod going down
+  const shank = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.45, 6), metal);
+  shank.position.y = -0.295;
+  hook.add(shank);
+
+  // Bend: part of a ring, curving down, around, and back up like a J
+  const BEND_R = 0.18;
+  const BEND_ARC = Math.PI + 0.6;
+  const bend = new THREE.Mesh(
+    new THREE.TorusGeometry(BEND_R, 0.035, 6, 14, BEND_ARC),
+    metal
   );
-  mesh.castShadow = true;
+  bend.position.set(BEND_R, -0.52, 0);
+  bend.rotation.z = Math.PI; // start the curve where the shank ends
+  hook.add(bend);
+
+  // Point: a small cone at the end of the curve
+  const point = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 5), metal);
+  point.position.set(0.29, -0.36, 0);
+  point.rotation.z = 0.6; // follows the direction of the curve
+  hook.add(point);
+
+  hook.traverse((m) => {
+    if (m.isMesh) m.castShadow = true;
+  });
+  hook.scale.setScalar(HOOK_SCALE);
+  return hook;
+}
+
+// origin = where the hook is thrown from and comes back to (the character's hands)
+// onCatch(kind) runs every time something reaches him. kind is 'plank' or 'bottle'
+export function createHook(scene, origin, debris, onCatch) {
+  const mesh = makeHookMesh();
   mesh.visible = false;
   scene.add(mesh);
 
@@ -45,8 +89,11 @@ export function createHook(scene, origin, debris, onCatch) {
     if (dir.length() > HOOK_RANGE) dir.setLength(HOOK_RANGE);
 
     target.copy(origin).add(dir);
-    target.y = 0.4;
+    target.y = HOOK_HEIGHT;
     mesh.position.copy(origin);
+
+    // Turn the hook so its point faces back toward the player (so it "snags" on the way back)
+    mesh.rotation.set(0, Math.atan2(dir.x, dir.z) + Math.PI / 2, 0);
     state = 'out';
   }
 
@@ -85,18 +132,22 @@ export function createHook(scene, origin, debris, onCatch) {
 
       if (pos.distanceTo(origin) < 0.5) {
         if (caught) {
+          const kind = caught.kind;
           debris.remove(caught);
           caught = null;
-          onCatch();
+          onCatch(kind);
         }
         state = 'idle';
       }
     }
 
-    // Caught piece sticks to the hook
-    if (caught) caught.mesh.position.copy(pos);
+    // Caught thing hangs under the hook
+    if (caught) {
+      caught.mesh.position.copy(pos);
+      caught.mesh.position.y -= CARRY_DROP;
+    }
 
-    // Rope goes from his hands to the hook
+    // Rope goes from his hands to the hook's eye
     const p = ropeGeo.attributes.position;
     p.setXYZ(0, origin.x, origin.y, origin.z);
     p.setXYZ(1, pos.x, pos.y, pos.z);
