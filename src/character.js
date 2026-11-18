@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { WALK_SPEED, WALK_ACCEL, CHAR_RADIUS } from './config.js';
 
+// Keeps an angle between -PI and PI so turning always goes the short way
+function wrapAngle(a) {
+  return Math.atan2(Math.sin(a), Math.cos(a));
+}
+
 export function createCharacter(raft) {
   // root = where he stands on the raft. It's a child of the raft so he rides the waves with it.
   const root = new THREE.Group();
@@ -46,8 +51,17 @@ export function createCharacter(raft) {
   let facing = 0; // which way he's looking
   let walkCycle = 0; // drives the waddle
 
+  // When he swings the oar, he snaps to face that way for a moment
+  let forcedFacing = 0;
+  let forceTimer = 0;
+
   const worldPos = new THREE.Vector3(); // where he is in the world
   const hand = new THREE.Vector3(); // where the hook comes from
+
+  function faceDirection(angle, holdTime) {
+    forcedFacing = angle;
+    forceTimer = holdTime;
+  }
 
   // input is { x, z }, each between -1 and 1
   function update(dt, t, input) {
@@ -85,15 +99,18 @@ export function createCharacter(raft) {
       }
     }
 
-    // Turn to face where he's walking (always the short way round)
+    // ---------- Facing ----------
     const speed = Math.hypot(velocity.x, velocity.y);
-    if (speed > 0.3) {
+    if (forceTimer > 0) {
+      // Swinging: turn fast toward the swing direction
+      forceTimer -= dt;
+      facing += wrapAngle(forcedFacing - facing) * (1 - Math.exp(-30 * dt));
+    } else if (speed > 0.3) {
+      // Walking: turn toward where he's going
       const targetFacing = Math.atan2(velocity.x, velocity.y);
-      let diff = targetFacing - facing;
-      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      facing += diff * (1 - Math.exp(-12 * dt));
-      root.rotation.y = facing;
+      facing += wrapAngle(targetFacing - facing) * (1 - Math.exp(-12 * dt));
     }
+    root.rotation.y = facing;
 
     // ---------- Waddle animation ----------
     const moving = Math.min(speed / WALK_SPEED, 1); // 0 standing, 1 full speed
@@ -105,18 +122,18 @@ export function createCharacter(raft) {
 
     // Squash and stretch: breathing when idle, squishing with each step when walking
     const squash = 1 + Math.sin(t * 3) * 0.03 * (1 - moving) - Math.abs(step) * 0.06 * moving;
-    const widen = 1 / Math.sqrt(squash); // keep the same "volume" so it looks squishy, not shrinking
+    const widen = 1 / Math.sqrt(squash); // keep the same "volume" so it looks squishy
     wobble.scale.set(widen, squash, widen);
 
     // Feet step forward and back
     feet[0].position.z = 0.05 + step * 0.15 * moving;
     feet[1].position.z = 0.05 - step * 0.15 * moving;
 
-    // Update world positions for the hook
+    // Update world positions for the hook and the oar
     root.getWorldPosition(worldPos);
     hand.copy(worldPos);
     hand.y += 0.6;
   }
 
-  return { update, position: root.position, worldPos, hand };
+  return { update, faceDirection, root, position: root.position, worldPos, hand };
 }

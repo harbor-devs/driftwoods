@@ -9,7 +9,7 @@ import { createDebris } from './debris.js';
 import { createHook } from './hook.js';
 import { createBuilder } from './build.js';
 import { createShark } from './shark.js';
-import { createSpear } from './spear.js';
+import { createOar } from './oar.js';
 import { createIsland } from './island.js';
 import { createHud, createJourneyBar, showToast, showEndScreen } from './ui.js';
 
@@ -36,10 +36,9 @@ const hook = createHook(scene, character.hand, debris, () => {
   refreshHud();
 });
 
-const spear = createSpear(scene, raft, shark, (result) => {
-  if (result === 'scared') showToast('Hit! The shark swam off... for now');
+const oar = createOar(character, shark, (result) => {
+  if (result === 'scared') showToast('Whack! The shark swam off... for now');
   if (result === 'killed') showToast('Shark down! Another one will come');
-  if (result === 'miss') showToast('Missed. Wait till it gets close');
 });
 
 function refreshHud() {
@@ -51,24 +50,55 @@ refreshHud();
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 const waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-const aimPoint = new THREE.Vector3();
+const hitPoint = new THREE.Vector3();
+
+// Where the mouse is pointing on the water right now (the oar aims here)
+const mouseAim = new THREE.Vector3();
+let hasMouseAim = false;
 
 // Turns the mouse position on screen into a point on the water
 function getWaterPoint(e) {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
-  return raycaster.ray.intersectPlane(waterPlane, aimPoint);
+  return raycaster.ray.intersectPlane(waterPlane, hitPoint);
+}
+
+function swingTowardMouse() {
+  if (!hasMouseAim) return;
+  const me = character.worldPos;
+  const angle = Math.atan2(mouseAim.x - me.x, mouseAim.z - me.z);
+  oar.swingAt(angle);
 }
 
 window.addEventListener('pointermove', (e) => {
-  if (!buildMode) return;
   const p = getWaterPoint(e);
-  if (p) builder.hover(p, planks >= TILE_COST);
+  if (!p) return;
+  mouseAim.copy(p);
+  hasMouseAim = true;
+  if (buildMode) builder.hover(p, planks >= TILE_COST);
 });
+
+// Stop the right-click menu from popping up
+window.addEventListener('contextmenu', (e) => e.preventDefault());
 
 window.addEventListener('pointerdown', (e) => {
   if (gameEnded) return;
+
+  const p = getWaterPoint(e);
+  if (p) {
+    mouseAim.copy(p);
+    hasMouseAim = true;
+  }
+
+  // Right click = swing the oar
+  if (e.button === 2) {
+    swingTowardMouse();
+    return;
+  }
+
+  // Left click only from here
+  if (e.button !== 0) return;
 
   if (buildMode) {
     if (planks >= TILE_COST && builder.place()) {
@@ -78,7 +108,6 @@ window.addEventListener('pointerdown', (e) => {
     return;
   }
 
-  const p = getWaterPoint(e);
   if (p) hook.throwAt(p);
 });
 
@@ -99,7 +128,7 @@ window.addEventListener('keydown', (e) => {
 
   if (key === ' ' && !e.repeat) {
     e.preventDefault(); // stop Space from scrolling the page
-    spear.stab();
+    swingTowardMouse();
   }
 });
 
@@ -136,7 +165,7 @@ function animate() {
   followRaft(raft.group.position.x, dt);
   debris.update(dt, t, raft.group.position.x);
   hook.update(dt);
-  spear.update(dt);
+  oar.update(dt);
 
   if (!gameEnded) {
     shark.update(dt, t);
