@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import './style.css';
 import { TILE_COST, JOURNEY_TIME } from './config.js';
-import { renderer, scene, camera, followRaft } from './scene.js';
+import { renderer, scene, camera, followRaft, shakeCamera } from './scene.js';
 import { createOcean, waveHeight } from './ocean.js';
 import { createRaft } from './raft.js';
 import { createCharacter } from './character.js';
@@ -11,7 +11,13 @@ import { createBuilder } from './build.js';
 import { createShark } from './shark.js';
 import { createOar } from './oar.js';
 import { createIsland } from './island.js';
-import { createHud, createJourneyBar, showToast, showEndScreen } from './ui.js';
+import {
+  createHud,
+  createJourneyBar,
+  createSharkWarning,
+  showToast,
+  showEndScreen,
+} from './ui.js';
 
 // ---------- Game state ----------
 let planks = 0;
@@ -25,10 +31,19 @@ const raft = createRaft(scene);
 const character = createCharacter(raft);
 const debris = createDebris(scene);
 const builder = createBuilder(raft);
-const shark = createShark(scene, raft.group, raft.tiles, waveHeight);
 const island = createIsland(scene);
 const hud = createHud();
 const journeyBar = createJourneyBar();
+const sharkWarning = createSharkWarning();
+
+// The shark tells us what it's doing, and we decide how it feels
+const shark = createShark(scene, raft.group, raft.tiles, waveHeight, (event) => {
+  if (event === 'bite') shakeCamera(0.25);
+  if (event === 'tileLost') {
+    shakeCamera(0.6);
+    showToast('The shark ate a tile!');
+  }
+});
 
 // The hook comes out of the character's hands
 const hook = createHook(scene, character.hand, debris, () => {
@@ -37,8 +52,14 @@ const hook = createHook(scene, character.hand, debris, () => {
 });
 
 const oar = createOar(scene, character, shark, (result) => {
-  if (result === 'scared') showToast('Whack! The shark swam off... for now');
-  if (result === 'killed') showToast('Shark down! Another one will come');
+  if (result === 'scared') {
+    shakeCamera(0.2);
+    showToast('Whack! The shark swam off... for now');
+  }
+  if (result === 'killed') {
+    shakeCamera(0.35);
+    showToast('Shark down! Another one will come');
+  }
 });
 
 function refreshHud() {
@@ -48,6 +69,7 @@ refreshHud();
 
 function endGame(title, text) {
   gameEnded = true;
+  sharkWarning.set(false);
   showEndScreen(title, text);
 }
 
@@ -173,6 +195,7 @@ function animate() {
 
   if (!gameEnded) {
     shark.update(dt, t);
+    sharkWarning.set(shark.isThreat());
 
     journeyTime += dt;
     const progress = Math.min(journeyTime / JOURNEY_TIME, 1);

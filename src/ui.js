@@ -37,6 +37,25 @@ export function createJourneyBar() {
   return { set };
 }
 
+// ---------- Shark warning (top middle, under the journey bar) ----------
+export function createSharkWarning() {
+  const el = document.createElement('div');
+  el.id = 'shark-warning';
+  el.textContent = 'SHARK!';
+  document.body.appendChild(el);
+
+  let showing = false;
+
+  // Only touch the page when it actually changes (this runs every frame)
+  function set(on) {
+    if (on === showing) return;
+    showing = on;
+    el.classList.toggle('show', on);
+  }
+
+  return { set };
+}
+
 // ---------- Popup message (bottom middle) ----------
 let toastTimeout = null;
 

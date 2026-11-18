@@ -24,7 +24,8 @@ function distXZ(a, b) {
   return Math.sqrt(dx * dx + dz * dz);
 }
 
-export function createShark(scene, raft, tiles, waveHeight) {
+// onEvent gets called with 'attack', 'bite' or 'tileLost' so main.js can react
+export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) {
   // ---------- Body (made of simple low-poly cones) ----------
   const shark = new THREE.Group();
   const skin = new THREE.MeshStandardMaterial({ color: 0x5b6b78, flatShading: true });
@@ -148,6 +149,11 @@ export function createShark(scene, raft, tiles, waveHeight) {
     return distXZ(pos, point) < range;
   }
 
+  // Is the shark coming for the raft right now? (used for the warning banner)
+  function isThreat() {
+    return state === 'attacking' || state === 'biting';
+  }
+
   // ---------- Runs every frame ----------
   function update(dt, t) {
     // Red flash fades back to normal
@@ -168,7 +174,10 @@ export function createShark(scene, raft, tiles, waveHeight) {
       attackTimer -= dt;
       if (attackTimer <= 0 && tiles.size > 0) {
         target = pickEdgeTile();
-        if (target) state = 'attacking';
+        if (target) {
+          state = 'attacking';
+          onEvent('attack');
+        }
       }
     } else if (state === 'attacking') {
       if (!tiles.has(target.key)) {
@@ -180,6 +189,7 @@ export function createShark(scene, raft, tiles, waveHeight) {
         if (distXZ(pos, goal) < 1.5) {
           state = 'biting';
           biteTimer = BITE_TIME;
+          onEvent('bite');
         }
       }
     } else if (state === 'biting') {
@@ -201,6 +211,7 @@ export function createShark(scene, raft, tiles, waveHeight) {
             raft.remove(target.tile);
             tiles.delete(target.key);
             target = null;
+            onEvent('tileLost');
             backToCircling();
           }
         }
@@ -253,5 +264,5 @@ export function createShark(scene, raft, tiles, waveHeight) {
     pos.y = waveHeight(pos.x, pos.z, t) - 0.35;
   }
 
-  return { update, hit, isNear, position: pos };
+  return { update, hit, isNear, isThreat, position: pos };
 }
