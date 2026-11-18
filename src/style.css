@@ -36,7 +36,7 @@ canvas {
   margin-top: 2px;
 }
 
-/* ---------- Map pieces bar ---------- */
+/* ---------- Goals bar (map pieces + raft size) ---------- */
 #journey {
   position: fixed;
   top: 16px;
@@ -52,10 +52,14 @@ canvas {
   user-select: none;
 }
 
+#journey .row + .row {
+  margin-top: 8px;
+}
+
 #journey .label {
   font-size: 13px;
   font-weight: 700;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 #journey .slots {
@@ -73,6 +77,24 @@ canvas {
 
 #journey .slot.found {
   background: #e0a64a;
+}
+
+#journey .bar {
+  height: 10px;
+  border-radius: 4px;
+  background: rgba(43, 58, 66, 0.15);
+  overflow: hidden;
+}
+
+#journey .fill {
+  height: 100%;
+  width: 0%;
+  background: #2a8fbd;
+  transition: width 0.3s, background 0.4s;
+}
+
+#journey .fill.done {
+  background: #4fb862;
 }
 
 #game-over {
@@ -134,7 +156,7 @@ canvas {
 /* ---------- Shark warning banner ---------- */
 #shark-warning {
   position: fixed;
-  top: 70px;
+  top: 110px;
   left: 50%;
   transform: translateX(-50%);
   padding: 6px 18px;

@@ -19,30 +19,51 @@ export function createHud() {
   return { update };
 }
 
-// ---------- Map pieces bar (top middle) ----------
-export function createMapBar(total) {
+// ---------- Goals bar (top middle): map pieces + raft size ----------
+export function createMapBar(totalPieces, raftGoal) {
   const el = document.createElement('div');
   el.id = 'journey';
   el.innerHTML = `
-    <div class="label"></div>
-    <div class="slots">${'<div class="slot"></div>'.repeat(total)}</div>
+    <div class="row">
+      <div class="label map-label"></div>
+      <div class="slots">${'<div class="slot"></div>'.repeat(totalPieces)}</div>
+    </div>
+    <div class="row">
+      <div class="label raft-label"></div>
+      <div class="bar"><div class="fill"></div></div>
+    </div>
   `;
   document.body.appendChild(el);
 
-  const label = el.querySelector('.label');
+  const mapLabel = el.querySelector('.map-label');
+  const raftLabel = el.querySelector('.raft-label');
   const slots = el.querySelectorAll('.slot');
+  const fill = el.querySelector('.fill');
 
-  function set(count) {
-    label.textContent =
-      count >= total ? 'Map complete! Reach the island' : `Map pieces: ${count} / ${total}`;
-    slots.forEach((slot, i) => slot.classList.toggle('found', i < count));
+  let last = ''; // so we only update the page when something changed
+
+  function set(pieces, tiles, revealed) {
+    const key = `${pieces}|${tiles}|${revealed}`;
+    if (key === last) return;
+    last = key;
+
+    if (revealed) mapLabel.textContent = 'Follow the green arrow to the island!';
+    else if (pieces >= totalPieces) mapLabel.textContent = 'Map complete!';
+    else mapLabel.textContent = `Map pieces: ${pieces} / ${totalPieces}`;
+    slots.forEach((slot, i) => slot.classList.toggle('found', i < pieces));
+
+    const ready = tiles >= raftGoal;
+    raftLabel.textContent = ready
+      ? `Raft: ${tiles} / ${raftGoal} tiles, ready to sail`
+      : `Raft: ${tiles} / ${raftGoal} tiles`;
+    fill.style.width = `${Math.min(tiles / raftGoal, 1) * 100}%`;
+    fill.classList.toggle('done', ready);
   }
 
-  set(0);
   return { set };
 }
 
-// ---------- Shark warning (top middle, under the map bar) ----------
+// ---------- Shark warning (top middle, under the goals bar) ----------
 export function createSharkWarning() {
   const el = document.createElement('div');
   el.id = 'shark-warning';

@@ -11,6 +11,7 @@ import { createBuilder } from './build.js';
 import { createShark } from './shark.js';
 import { createOar } from './oar.js';
 import { createIsland } from './island.js';
+import { createGuide } from './guide.js';
 import {
   createHud,
   createMapBar,
@@ -21,14 +22,17 @@ import {
 
 // ---------- Game settings ----------
 const MAP_PIECES = 3; // bottles you need to find
+const RAFT_GOAL = 10; // tiles your raft needs before you can sail to the island
 const DOCK_DISTANCE = 9; // how lined up with the island you must be to land
 
 // ---------- Game state ----------
 let planks = 0;
 let buildMode = false;
 let mapPieces = 0;
+let islandRevealed = false;
 let gameEnded = false;
 let steerHintShown = false;
+let buildHintShown = false;
 
 function sideName(side) {
   return side < 0 ? 'left' : 'right';
@@ -40,8 +44,9 @@ const raft = createRaft(scene);
 const character = createCharacter(raft);
 const builder = createBuilder(raft);
 const island = createIsland(scene);
+const guide = createGuide(scene);
 const hud = createHud();
-const mapBar = createMapBar(MAP_PIECES);
+const mapBar = createMapBar(MAP_PIECES, RAFT_GOAL);
 const sharkWarning = createSharkWarning();
 
 const debris = createDebris(scene, (event, side) => {
@@ -80,15 +85,26 @@ const oar = createOar(scene, character, shark, (result) => {
 
 function foundMapPiece() {
   mapPieces++;
-  mapBar.set(mapPieces);
-
   if (mapPieces < MAP_PIECES) {
     showToast(`Map piece ${mapPieces} of ${MAP_PIECES}!`);
+  } else {
+    debris.stopBottles(); // no more bottles once the map is complete
+  }
+}
+
+// Runs every frame: when BOTH goals are done, the island shows up
+function checkGoals() {
+  if (islandRevealed || mapPieces < MAP_PIECES) return;
+
+  if (raft.tiles.size < RAFT_GOAL) {
+    if (!buildHintShown) {
+      showToast(`Map complete! Build your raft to ${RAFT_GOAL} tiles to set sail`);
+      buildHintShown = true;
+    }
     return;
   }
 
-  // Map complete: the island shows up off to one side
-  debris.stopBottles();
+  // Both done: put the island off to one side of the raft
   const raftX = raft.group.position.x;
   let side = Math.random() < 0.5 ? -1 : 1;
   let x = raftX + side * (10 + Math.random() * 6);
@@ -97,7 +113,16 @@ function foundMapPiece() {
     x = raftX + side * (10 + Math.random() * 6);
   }
   island.reveal(x);
-  showToast(`Map complete! Land is to your ${sideName(side)}`);
+  islandRevealed = true;
+  showToast(`Land ho! The island is to your ${sideName(side)}`);
+}
+
+// What the arrow should point at right now
+function getGuideTarget() {
+  if (islandRevealed) return { pos: island.position, kind: 'island' };
+  const bottle = debris.list.find((d) => d.kind === 'bottle' && !d.hooked);
+  if (bottle) return { pos: bottle.mesh.position, kind: 'bottle' };
+  return null;
 }
 
 function refreshHud() {
@@ -108,6 +133,7 @@ refreshHud();
 function endGame(title, text) {
   gameEnded = true;
   sharkWarning.set(false);
+  guide.hide();
   showEndScreen(title, text);
 }
 
@@ -236,6 +262,13 @@ function animate() {
   if (!gameEnded) {
     shark.update(dt, t);
     sharkWarning.set(shark.isThreat());
+
+    checkGoals();
+    mapBar.set(mapPieces, raft.tiles.size, islandRevealed);
+
+    const target = getGuideTarget();
+    guide.update(t, character.worldPos, target && target.pos, target && target.kind);
+
     island.update(dt);
 
     if (raft.tiles.size === 0) {
@@ -245,7 +278,7 @@ function animate() {
       if (linedUp) {
         endGame(
           'You made it!',
-          `You found the map and reached the island with ${raft.tiles.size} tiles left.`
+          `You found the map, built a ${raft.tiles.size} tile raft, and reached the island.`
         );
       } else if (!steerHintShown) {
         showToast('Steer over to the island!');
