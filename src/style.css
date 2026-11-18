@@ -181,3 +181,84 @@ canvas {
   from { transform: translateX(-50%) scale(1); }
   to { transform: translateX(-50%) scale(1.1); }
 }
+
+/* ---------- Pause menu ---------- */
+#pause-menu {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 40, 55, 0.6);
+  font-family: system-ui, sans-serif;
+  color: white;
+  user-select: none;
+}
+
+#pause-menu.show {
+  display: flex;
+}
+
+#pause-menu .panel {
+  width: min(420px, 88vw);
+  text-align: center;
+}
+
+#pause-menu h1 {
+  margin: 0 0 18px;
+  font-size: 40px;
+}
+
+#pause-menu .buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+#pause-menu button {
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+#pause-menu .resume {
+  border: none;
+  background: #ffd27a;
+  color: #2b3a42;
+}
+
+#pause-menu .restart {
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  background: transparent;
+  color: white;
+}
+
+#pause-menu .controls {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 14px;
+}
+
+#pause-menu .controls div {
+  display: flex;
+  gap: 12px;
+  padding: 5px 0;
+}
+
+#pause-menu .controls div + div {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+#pause-menu .controls b {
+  flex: 0 0 140px;
+  color: #ffd27a;
+}
+
+#pause-menu .controls span {
+  opacity: 0.85;
+}

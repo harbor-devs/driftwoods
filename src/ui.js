@@ -9,7 +9,7 @@ export function createHud() {
   function update(planks, buildMode) {
     const hint = buildMode
       ? `BUILD MODE: click next to your raft to add a tile (${TILE_COST} planks). B to stop building`
-      : 'WASD walk (lean to steer). Left click: hook. Right click or Space: oar. B: build';
+      : 'WASD walk (lean to steer). Left click: hook. Right click or Space: oar. B: build. Esc: pause';
     el.innerHTML = `
       <div class="count">Planks: ${planks}</div>
       <div class="hint">${hint}</div>
@@ -110,4 +110,43 @@ export function showEndScreen(title, text) {
   `;
   document.body.appendChild(box);
   document.getElementById('restart').addEventListener('click', () => location.reload());
+}
+
+// ---------- Pause menu ----------
+// onResume and onRestart are functions main.js gives us
+export function createPauseMenu({ onResume, onRestart }) {
+  const el = document.createElement('div');
+  el.id = 'pause-menu';
+  el.innerHTML = `
+    <div class="panel">
+      <h1>Paused</h1>
+      <div class="buttons">
+        <button class="resume">Resume</button>
+        <button class="restart">Restart</button>
+      </div>
+      <div class="controls">
+        <div><b>WASD / Arrows</b><span>Walk. Stand near an edge to lean and steer the raft</span></div>
+        <div><b>Left click</b><span>Throw the hook</span></div>
+        <div><b>Right click / Space</b><span>Swing the oar</span></div>
+        <div><b>B</b><span>Build mode</span></div>
+        <div><b>Esc / P</b><span>Pause and resume</span></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(el);
+
+  el.querySelector('.resume').addEventListener('click', onResume);
+  el.querySelector('.restart').addEventListener('click', onRestart);
+
+  function show() {
+    el.classList.add('show');
+  }
+
+  function hide() {
+    el.classList.remove('show');
+    // Drop focus from the button, so pressing Space later doesn't "click" it again
+    if (document.activeElement) document.activeElement.blur();
+  }
+
+  return { show, hide };
 }

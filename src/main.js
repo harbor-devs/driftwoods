@@ -16,6 +16,7 @@ import {
   createHud,
   createMapBar,
   createSharkWarning,
+  createPauseMenu,
   showToast,
   showEndScreen,
 } from './ui.js';
@@ -31,6 +32,8 @@ let buildMode = false;
 let mapPieces = 0;
 let islandRevealed = false;
 let gameEnded = false;
+let paused = false;
+let gameTime = 0; // game clock in seconds, only ticks while NOT paused
 let steerHintShown = false;
 let buildHintShown = false;
 
@@ -48,6 +51,11 @@ const guide = createGuide(scene);
 const hud = createHud();
 const mapBar = createMapBar(MAP_PIECES, RAFT_GOAL);
 const sharkWarning = createSharkWarning();
+
+const pauseMenu = createPauseMenu({
+  onResume: () => setPaused(false),
+  onRestart: () => location.reload(),
+});
 
 const debris = createDebris(scene, (event, side) => {
   if (event === 'bottleSpawned') showToast(`A bottle! Far to your ${sideName(side)}`);
@@ -173,7 +181,7 @@ window.addEventListener('pointermove', (e) => {
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 
 window.addEventListener('pointerdown', (e) => {
-  if (gameEnded) return;
+  if (gameEnded || paused) return; // clicks on the pause menu don't throw the hook
 
   const p = getWaterPoint(e);
   if (p) {
@@ -207,8 +215,15 @@ const keysDown = new Set();
 
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
+
+  // Esc or P opens/closes the pause menu
+  if ((key === 'escape' || key === 'p') && !e.repeat) {
+    if (!gameEnded) setPaused(!paused);
+    return;
+  }
+
+  if (gameEnded || paused) return;
   keysDown.add(key);
-  if (gameEnded) return;
 
   if (key === 'b' && !e.repeat) {
     buildMode = !buildMode;
@@ -226,9 +241,6 @@ window.addEventListener('keyup', (e) => {
   keysDown.delete(e.key.toLowerCase());
 });
 
-// If you click away from the window, let go of all keys
-window.addEventListener('blur', () => keysDown.clear());
-
 // Which way WASD / arrows are pushing. W is "up the screen" = away from the camera.
 function getMoveInput() {
   const input = { x: 0, z: 0 };
@@ -240,6 +252,27 @@ function getMoveInput() {
   return input;
 }
 
+// ---------- Pause ----------
+function setPaused(on) {
+  if (gameEnded) on = false; // no pausing on the win / lose screen
+  if (on === paused) return;
+  paused = on;
+  keysDown.clear(); // so he doesn't keep walking after you resume
+  if (paused) pauseMenu.show();
+  else pauseMenu.hide();
+}
+
+// Click away from the window = let go of all keys AND pause
+window.addEventListener('blur', () => {
+  keysDown.clear();
+  setPaused(true);
+});
+
+// Switch to another tab = pause
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) setPaused(true);
+});
+
 // ---------- Game loop ----------
 let lastTime = performance.now();
 
@@ -247,7 +280,15 @@ function animate() {
   const now = performance.now();
   const dt = Math.min((now - lastTime) / 1000, 0.05); // seconds since last frame
   lastTime = now;
-  const t = now / 1000;
+
+  // Paused: just draw the frozen scene, don't move anything
+  if (paused) {
+    renderer.render(scene, camera);
+    return;
+  }
+
+  gameTime += dt;
+  const t = gameTime;
 
   const raftX = raft.group.position.x;
   const raftZ = raft.group.position.z;
