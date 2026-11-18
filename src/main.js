@@ -45,7 +45,7 @@ const hook = createHook(scene, character.hand, debris, () => {
   refreshHud();
 });
 
-const oar = createOar(character, shark, (result) => {
+const oar = createOar(scene, character, shark, (result) => {
   if (result === 'scared') showToast('Whack! The shark swam off... for now');
   if (result === 'killed') showToast('Shark down! Another one will come');
 });
