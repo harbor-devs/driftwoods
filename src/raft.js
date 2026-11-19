@@ -41,6 +41,20 @@ const beamMat = new THREE.MeshStandardMaterial({
   roughness: 0.9,
 });
 
+// The 4 sides of a tile, in the order we try them for items:
+// forward (up the screen) first, because that's where stuff floats in from
+const SIDES = [
+  { dx: 0, dz: -1 },
+  { dx: -1, dz: 0 },
+  { dx: 1, dz: 0 },
+  { dx: 0, dz: 1 },
+];
+
+// Items are made facing forward. This is how much to turn one so it faces a side.
+export function sideAngle(side) {
+  return Math.atan2(-side.dx, -side.dz);
+}
+
 // One raft tile = 3 planks side by side, on 2 crossbeams
 function makeTile() {
   const tile = new THREE.Group();
@@ -65,6 +79,11 @@ function makeTile() {
     beam.castShadow = true;
     tile.add(beam);
   }
+
+  // Each tile can hold one item (like a net). Empty for now.
+  tile.userData.item = null; // 'net', later 'spikes' or 'sail'
+  tile.userData.itemSide = null; // which side it faces, like { dx: 0, dz: -1 }
+  tile.userData.itemMesh = null;
 
   return tile;
 }
@@ -173,8 +192,48 @@ export function createRaft(scene) {
     );
   }
 
+  // Is a neighbour's item (like a net) hanging over this empty spot?
+  function isBlockedByItem(gx, gz) {
+    for (const s of SIDES) {
+      const n = tiles.get(`${gx + s.dx},${gz + s.dz}`);
+      if (!n || !n.userData.item) continue;
+      // The neighbour's item faces back toward this spot
+      if (n.userData.itemSide.dx === -s.dx && n.userData.itemSide.dz === -s.dz) return true;
+    }
+    return false;
+  }
+
   function canBuildAt(gx, gz) {
-    return !tiles.has(`${gx},${gz}`) && isNextToRaft(gx, gz);
+    return !tiles.has(`${gx},${gz}`) && isNextToRaft(gx, gz) && !isBlockedByItem(gx, gz);
+  }
+
+  // First side of this tile with no tile next to it (null = it's not an edge tile)
+  function openSide(gx, gz) {
+    for (const s of SIDES) {
+      if (!tiles.has(`${gx + s.dx},${gz + s.dz}`)) return s;
+    }
+    return null;
+  }
+
+  // Items go on edge tiles that don't have an item yet
+  function canPlaceItemAt(gx, gz) {
+    const tile = tiles.get(`${gx},${gz}`);
+    if (!tile || tile.userData.item) return false;
+    return openSide(gx, gz) !== null;
+  }
+
+  // Puts an item on a tile, turned to face the open side. It's a child of the tile,
+  // so if the shark eats the tile, the item goes with it.
+  function addItem(gx, gz, kind, mesh) {
+    if (!canPlaceItemAt(gx, gz)) return false;
+    const tile = tiles.get(`${gx},${gz}`);
+    const side = openSide(gx, gz);
+    mesh.rotation.y = sideAngle(side);
+    tile.add(mesh);
+    tile.userData.item = kind;
+    tile.userData.itemSide = side;
+    tile.userData.itemMesh = mesh;
+    return true;
   }
 
   // charPos = where the character stands on the raft
@@ -241,12 +300,15 @@ export function createRaft(scene) {
     tiles,
     center,
     addTile,
+    addItem,
     gridToLocal,
     worldToGrid,
     hasTileAt,
     closestTileCenter,
     distanceTo,
     canBuildAt,
+    canPlaceItemAt,
+    openSide,
     update,
   };
 }

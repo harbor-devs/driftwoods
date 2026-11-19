@@ -440,3 +440,88 @@ kbd {
   flex-wrap: wrap;
   gap: 4px;
 }
+
+/* ---------- Build menu (bottom right, only in build mode) ---------- */
+#build-menu {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  padding: 8px 30px 10px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+#build-menu.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#build-menu .title {
+  margin-bottom: 8px;
+  font-size: 16px;
+  text-align: center;
+}
+
+#build-menu .slots {
+  display: flex;
+  gap: 10px;
+}
+
+#build-menu .slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 86px;
+  padding: 8px 4px 6px;
+  background: rgba(40, 20, 5, 0.35);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  transition: transform 0.15s, border-color 0.15s, background 0.15s;
+}
+
+/* Number key badge in the top left corner of each slot */
+#build-menu .slot kbd {
+  position: absolute;
+  top: -9px;
+  left: -7px;
+  padding: 1px 6px;
+  font-size: 12px;
+}
+
+#build-menu .slot .icon svg {
+  display: block;
+  width: 34px;
+  height: 34px;
+}
+
+#build-menu .slot .name {
+  font-size: 14px;
+}
+
+#build-menu .slot .cost {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 13px;
+}
+
+#build-menu .slot .cost svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* The one you picked: gold border, lifted up a bit */
+#build-menu .slot.selected {
+  border-color: var(--gold);
+  background: rgba(255, 210, 122, 0.18);
+  transform: translateY(-4px);
+}
+
+/* Can't afford it yet: cost turns red */
+#build-menu .slot.poor .cost {
+  color: #ff9a8a;
+}

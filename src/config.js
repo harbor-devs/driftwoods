@@ -8,6 +8,11 @@ export const TILE_SIZE = 2; // size of one raft tile
 export const TILE_COST = 3; // planks needed for one new tile
 export const JOURNEY_TIME = 180; // seconds to reach the island
 
+// Build menu items
+export const NET_PLANKS = 4; // planks for one catch net
+export const NET_ROPE = 2; // rope for one catch net
+export const NET_REACH = 1.8; // how close floating stuff must get to the net to be caught
+
 // Raft steering (from the character leaning)
 export const STEER_ACCEL = 14; // how hard leaning pushes the raft
 export const STEER_MAX_SPEED = 6; // top speed (for the starting 2x2 raft)

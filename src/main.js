@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import './style.css';
-import { TILE_COST, WORLD_LIMIT } from './config.js';
+import { WORLD_LIMIT } from './config.js';
 import { renderer, scene, camera, followRaft, shakeCamera } from './scene.js';
 import { createOcean, waveHeight } from './ocean.js';
 import { createRaft } from './raft.js';
 import { createCharacter } from './character.js';
 import { createDebris } from './debris.js';
 import { createHook } from './hook.js';
-import { createBuilder } from './build.js';
+import { createBuilder, BUILD_ITEMS } from './build.js';
+import { createNets } from './net.js';
 import { createShark } from './shark.js';
 import { createOar } from './oar.js';
 import { createIsland } from './island.js';
@@ -15,6 +16,7 @@ import { createGuide } from './guide.js';
 import { initSplashes, updateSplashes } from './splash.js';
 import {
   createHud,
+  createBuildMenu,
   createMapBar,
   createSharkWarning,
   createPauseMenu,
@@ -32,6 +34,7 @@ const BARREL_ROPE = 2; // rope you get from one barrel
 let planks = 0;
 let rope = 0;
 let buildMode = false;
+let selectedId = 'tile'; // what build mode will build (see BUILD_ITEMS in build.js)
 let mapPieces = 0;
 let islandRevealed = false;
 let gameEnded = false;
@@ -53,6 +56,7 @@ const builder = createBuilder(raft);
 const island = createIsland(scene);
 const guide = createGuide(scene);
 const hud = createHud();
+const buildMenu = createBuildMenu(BUILD_ITEMS);
 const mapBar = createMapBar(MAP_PIECES, RAFT_GOAL);
 const sharkWarning = createSharkWarning();
 
@@ -75,19 +79,26 @@ const shark = createShark(scene, raft.group, raft.tiles, waveHeight, (event) => 
   }
 });
 
-// The hook comes out of the character's hands
-const hook = createHook(scene, character.hand, debris, (kind) => {
-  if (kind === 'plank') {
-    planks++;
-    refreshHud();
+// Something reached the raft (from the hook OR a net)
+function collect(kind) {
+  if (kind === 'bottle') {
+    foundMapPiece();
+    return;
   }
+  if (kind === 'plank') planks++;
   if (kind === 'barrel') {
     rope += BARREL_ROPE;
-    refreshHud();
     showToast(`A barrel! +${BARREL_ROPE} rope`);
   }
-  if (kind === 'bottle') foundMapPiece();
-});
+  refreshHud();
+  refreshGhost(); // ghost may turn from red to green now
+}
+
+// The hook comes out of the character's hands
+const hook = createHook(scene, character.hand, debris, collect);
+
+// Nets catch floating stuff on their own
+const nets = createNets(raft, debris, collect);
 
 const oar = createOar(scene, character, shark, (result) => {
   if (result === 'scared') {
@@ -142,10 +153,33 @@ function getGuideTarget() {
   return null;
 }
 
+// ---------- Build helpers ----------
+function selectedItem() {
+  return BUILD_ITEMS.find((it) => it.id === selectedId);
+}
+
+function canAfford(item) {
+  return planks >= item.planks && rope >= item.rope;
+}
+
+function needText(item) {
+  let text = `Need ${item.planks} planks`;
+  if (item.rope > 0) text += ` and ${item.rope} rope`;
+  return text;
+}
+
 function refreshHud() {
   hud.update(planks, rope, buildMode);
+  buildMenu.set(buildMode, selectedId, planks, rope);
 }
 refreshHud();
+
+function setBuildMode(on) {
+  buildMode = on;
+  builder.hide();
+  refreshHud();
+  refreshGhost();
+}
 
 function endGame(title, text) {
   gameEnded = true;
@@ -163,6 +197,12 @@ const hitPoint = new THREE.Vector3();
 // Where the mouse points on the water right now (the oar aims here)
 const mouseAim = new THREE.Vector3();
 let hasMouseAim = false;
+
+// Move the build ghost to wherever the mouse is pointing
+function refreshGhost() {
+  if (!buildMode || !hasMouseAim) return;
+  builder.hover(mouseAim, selectedId, canAfford(selectedItem()));
+}
 
 // Turns the mouse position on screen into a point on the water
 function getWaterPoint(e) {
@@ -183,7 +223,7 @@ window.addEventListener('pointermove', (e) => {
   if (!p) return;
   mouseAim.copy(p);
   hasMouseAim = true;
-  if (buildMode) builder.hover(p, planks >= TILE_COST);
+  refreshGhost();
 });
 
 // Stop the right-click menu from popping up
@@ -208,9 +248,19 @@ window.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return;
 
   if (buildMode) {
-    if (planks >= TILE_COST && builder.place()) {
-      planks -= TILE_COST;
+    refreshGhost(); // make sure the ghost is where the click is
+    if (!builder.hasSpot()) return; // clicked somewhere you can't build
+
+    const item = selectedItem();
+    if (!canAfford(item)) {
+      showToast(needText(item));
+      return;
+    }
+    if (builder.place()) {
+      planks -= item.planks;
+      rope -= item.rope;
       refreshHud();
+      if (item.id === 'net') showToast('Net up! It grabs planks and barrels that float by');
     }
     return;
   }
@@ -234,10 +284,13 @@ window.addEventListener('keydown', (e) => {
   if (gameEnded || paused) return;
   keysDown.add(key);
 
-  if (key === 'b' && !e.repeat) {
-    buildMode = !buildMode;
-    builder.hide();
-    refreshHud();
+  if (key === 'b' && !e.repeat) setBuildMode(!buildMode);
+
+  // Number keys pick what to build (and turn build mode on if it's off)
+  const item = BUILD_ITEMS.find((it) => it.key === key);
+  if (item && !e.repeat) {
+    selectedId = item.id;
+    setBuildMode(true);
   }
 
   if (key === ' ' && !e.repeat) {
@@ -307,6 +360,7 @@ function animate() {
   character.update(dt, t, getMoveInput());
   followRaft(raftX, raftZ, dt);
   debris.update(dt, t, raftX);
+  nets.update(dt, t);
   hook.update(dt);
   oar.update(dt);
   updateSplashes(dt, t);

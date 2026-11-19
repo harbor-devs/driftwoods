@@ -19,6 +19,25 @@ const ROPE_ICON = `
     <circle cx="15" cy="15" r="2.2" fill="#3a2410"/>
   </svg>`;
 
+// A raft tile seen from above: 3 planks side by side
+const TILE_ICON = `
+  <svg viewBox="0 0 32 32">
+    <rect x="5" y="5" width="7" height="22" rx="1.5" fill="#c8894d" stroke="#3a2410" stroke-width="2"/>
+    <rect x="12.5" y="5" width="7" height="22" rx="1.5" fill="#b98349" stroke="#3a2410" stroke-width="2"/>
+    <rect x="20" y="5" width="7" height="22" rx="1.5" fill="#d3a46c" stroke="#3a2410" stroke-width="2"/>
+  </svg>`;
+
+// Two posts with a net between them
+const NET_ICON = `
+  <svg viewBox="0 0 32 32">
+    <path d="M8 8 L24 8 L22 26 L10 26 Z" fill="rgba(217,183,122,0.35)"/>
+    <path d="M8 8h16M8.7 14h14.6M9.3 20h13.4M12 8l0.7 18M16 8v18M20 8l-0.7 18" stroke="#f0dcae" stroke-width="1.6" fill="none"/>
+    <path d="M6 4v24M26 4v24" stroke="#3a2410" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M6 4v24M26 4v24" stroke="#8d5a2e" stroke-width="1.6" stroke-linecap="round"/>
+  </svg>`;
+
+const ITEM_ICONS = { tile: TILE_ICON, net: NET_ICON };
+
 const FIN_ICON = `
   <svg viewBox="0 0 32 32">
     <path d="M4 26 C12 22 16 12 15 4 C20 10 25 18 28 26 Z" fill="#fff3d6" stroke="#3a1010" stroke-width="2.5" stroke-linejoin="round"/>
@@ -53,13 +72,6 @@ export function createHud() {
   const ropeBox = el.querySelector('.rope');
   const ropeNum = ropeBox.querySelector('.num');
 
-  // Paper note that only shows in build mode
-  const buildHint = document.createElement('div');
-  buildHint.id = 'build-hint';
-  buildHint.className = 'parchment';
-  buildHint.textContent = `Click next to your raft to add a tile (${TILE_COST} planks)`;
-  document.body.appendChild(buildHint);
-
   // Small key badges instead of a long sentence
   const keys = document.createElement('div');
   keys.id = 'keys';
@@ -88,11 +100,63 @@ export function createHud() {
       lastRope = rope;
     }
     el.classList.toggle('can-build', planks >= TILE_COST);
-    buildHint.classList.toggle('show', buildMode);
     buildLabel.textContent = buildMode ? 'Stop building' : 'Build';
   }
 
   return { update };
+}
+
+// ---------- Build menu (bottom right) + hint paper (top left), only in build mode ----------
+export function createBuildMenu(items) {
+  const slotsHtml = items
+    .map(
+      (item) => `
+      <div class="slot" data-id="${item.id}">
+        <kbd>${item.key}</kbd>
+        <span class="icon">${ITEM_ICONS[item.id] || ''}</span>
+        <span class="name">${item.name}</span>
+        <span class="cost">
+          <span>${item.planks}</span>${PLANK_ICON}
+          ${item.rope > 0 ? `<span>${item.rope}</span>${ROPE_ICON}` : ''}
+        </span>
+      </div>`
+    )
+    .join('');
+
+  const el = document.createElement('div');
+  el.id = 'build-menu';
+  el.className = 'wood';
+  el.innerHTML = `<div class="title">Build</div><div class="slots">${slotsHtml}</div>`;
+  document.body.appendChild(el);
+  const slots = el.querySelectorAll('.slot');
+
+  // Paper note under the planks counter that says what to do
+  const hint = document.createElement('div');
+  hint.id = 'build-hint';
+  hint.className = 'parchment';
+  document.body.appendChild(hint);
+
+  let last = ''; // only touch the page when something changed
+
+  function set(on, selectedId, planks, rope) {
+    const key = `${on}|${selectedId}|${planks}|${rope}`;
+    if (key === last) return;
+    last = key;
+
+    el.classList.toggle('show', on);
+    hint.classList.toggle('show', on);
+
+    slots.forEach((slot, i) => {
+      const item = items[i];
+      slot.classList.toggle('selected', item.id === selectedId);
+      slot.classList.toggle('poor', planks < item.planks || rope < item.rope);
+    });
+
+    const selected = items.find((it) => it.id === selectedId);
+    if (selected) hint.textContent = `${selected.hint} (1 to ${items.length} to switch)`;
+  }
+
+  return { set };
 }
 
 // ---------- Goals board (top right): map pieces + raft size ----------
@@ -207,6 +271,7 @@ export function createPauseMenu({ onResume, onRestart }) {
         <div><span class="keys"><kbd>L-Click</kbd></span><span>Throw the hook</span></div>
         <div><span class="keys"><kbd>R-Click</kbd><kbd>Space</kbd></span><span>Swing the oar</span></div>
         <div><span class="keys"><kbd>B</kbd></span><span>Build mode</span></div>
+        <div><span class="keys"><kbd>1</kbd><kbd>2</kbd></span><span>Pick what to build</span></div>
         <div><span class="keys"><kbd>Esc</kbd><kbd>P</kbd></span><span>Pause and resume</span></div>
       </div>
     </div>
