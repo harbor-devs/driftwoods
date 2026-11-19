@@ -248,11 +248,19 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
         goal.set(w.x, 0, w.z);
         swimTowards(goal, speed(), dt);
         if (distXZ(pos, goal) < 1.5) {
-          state = 'biting';
-          biteTimer = BITE_TIME;
-          biteSplashTimer = BITE_SPLASH_EVERY;
-          splash(pos, 'medium'); // it lunges at the raft
-          onEvent('bite');
+          if (target.tile.userData.item === 'spikes') {
+            // Spikes! It gets stabbed and swims off instead of biting
+            const tile = target.tile;
+            splash(pos, 'big');
+            const result = hit(); // 'scared' or 'killed'
+            onEvent('spiked', { tile, result });
+          } else {
+            state = 'biting';
+            biteTimer = BITE_TIME;
+            biteSplashTimer = BITE_SPLASH_EVERY;
+            splash(pos, 'medium'); // it lunges at the raft
+            onEvent('bite');
+          }
         }
       }
     } else if (state === 'biting') {

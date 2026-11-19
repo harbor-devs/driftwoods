@@ -36,7 +36,22 @@ const NET_ICON = `
     <path d="M6 4v24M26 4v24" stroke="#8d5a2e" stroke-width="1.6" stroke-linecap="round"/>
   </svg>`;
 
-const ITEM_ICONS = { tile: TILE_ICON, net: NET_ICON };
+// Stakes on a log, pointing up
+const SPIKES_ICON = `
+  <svg viewBox="0 0 32 32">
+    <path d="M7 24 L9 6 L11 24 Z M14 24 L16 4 L18 24 Z M21 24 L23 6 L25 24 Z" fill="#c8894d" stroke="#3a2410" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="3" y="22" width="26" height="6" rx="3" fill="#6e4a2a" stroke="#3a2410" stroke-width="2"/>
+  </svg>`;
+
+// Mast with a full sail
+const SAIL_ICON = `
+  <svg viewBox="0 0 32 32">
+    <path d="M16 3v26" stroke="#3a2410" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M16 3v26" stroke="#8d5a2e" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M7 7 H25 C27 12 27 18 25 23 H7 C9 18 9 12 7 7 Z" fill="#f1e4c3" stroke="#3a2410" stroke-width="2" stroke-linejoin="round"/>
+  </svg>`;
+
+const ITEM_ICONS = { tile: TILE_ICON, net: NET_ICON, spikes: SPIKES_ICON, sail: SAIL_ICON };
 
 const FIN_ICON = `
   <svg viewBox="0 0 32 32">
@@ -271,7 +286,7 @@ export function createPauseMenu({ onResume, onRestart }) {
         <div><span class="keys"><kbd>L-Click</kbd></span><span>Throw the hook</span></div>
         <div><span class="keys"><kbd>R-Click</kbd><kbd>Space</kbd></span><span>Swing the oar</span></div>
         <div><span class="keys"><kbd>B</kbd></span><span>Build mode</span></div>
-        <div><span class="keys"><kbd>1</kbd><kbd>2</kbd></span><span>Pick what to build</span></div>
+        <div><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span><span>Pick what to build</span></div>
         <div><span class="keys"><kbd>Esc</kbd><kbd>P</kbd></span><span>Pause and resume</span></div>
       </div>
     </div>

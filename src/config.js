@@ -13,6 +13,15 @@ export const NET_PLANKS = 4; // planks for one catch net
 export const NET_ROPE = 2; // rope for one catch net
 export const NET_REACH = 1.8; // how close floating stuff must get to the net to be caught
 
+export const SPIKE_PLANKS = 3; // planks for one set of spikes
+export const SPIKE_ROPE = 1; // rope for one set of spikes
+export const SPIKE_HITS = 3; // how many shark attacks spikes take before they break
+
+export const SAIL_PLANKS = 6; // planks for one sail
+export const SAIL_ROPE = 3; // rope for one sail
+export const SAIL_BOOST = 0.3; // each sail makes the raft this much faster (0.3 = 30%)
+export const MAX_SAILS = 3; // you can't build more than this
+
 // Raft steering (from the character leaning)
 export const STEER_ACCEL = 14; // how hard leaning pushes the raft
 export const STEER_MAX_SPEED = 6; // top speed (for the starting 2x2 raft)

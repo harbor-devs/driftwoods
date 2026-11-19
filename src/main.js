@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
-import { WORLD_LIMIT } from './config.js';
+import { WORLD_LIMIT, MAX_SAILS } from './config.js';
 import { renderer, scene, camera, followRaft, shakeCamera } from './scene.js';
 import { createOcean, waveHeight } from './ocean.js';
 import { createRaft } from './raft.js';
@@ -9,6 +9,8 @@ import { createDebris } from './debris.js';
 import { createHook } from './hook.js';
 import { createBuilder, BUILD_ITEMS } from './build.js';
 import { createNets } from './net.js';
+import { damageSpikes } from './spikes.js';
+import { createSails } from './sail.js';
 import { createShark } from './shark.js';
 import { createOar } from './oar.js';
 import { createIsland } from './island.js';
@@ -53,6 +55,7 @@ initSplashes(scene);
 const raft = createRaft(scene);
 const character = createCharacter(raft);
 const builder = createBuilder(raft);
+const sails = createSails(raft);
 const island = createIsland(scene);
 const guide = createGuide(scene);
 const hud = createHud();
@@ -71,11 +74,20 @@ const debris = createDebris(scene, (event, side) => {
 });
 
 // The shark tells us what it's doing, and we decide how it feels
-const shark = createShark(scene, raft.group, raft.tiles, waveHeight, (event) => {
+const shark = createShark(scene, raft.group, raft.tiles, waveHeight, (event, data) => {
   if (event === 'bite') shakeCamera(0.25);
   if (event === 'tileLost') {
     shakeCamera(0.6);
     showToast('The shark ate a tile!');
+  }
+  if (event === 'spiked') {
+    shakeCamera(0.4);
+    const broke = damageSpikes(data.tile.userData.itemMesh);
+    if (broke) raft.removeItem(data.tile);
+
+    if (data.result === 'killed') showToast('The spikes finished off the shark!');
+    else if (broke) showToast('Ouch! The shark fled, but your spikes broke');
+    else showToast('Ouch! The shark hit your spikes and fled');
   }
 });
 
@@ -201,7 +213,8 @@ let hasMouseAim = false;
 // Move the build ghost to wherever the mouse is pointing
 function refreshGhost() {
   if (!buildMode || !hasMouseAim) return;
-  builder.hover(mouseAim, selectedId, canAfford(selectedItem()));
+  const item = selectedItem();
+  builder.hover(mouseAim, item, canAfford(item));
 }
 
 // Turns the mouse position on screen into a point on the water
@@ -252,6 +265,10 @@ window.addEventListener('pointerdown', (e) => {
     if (!builder.hasSpot()) return; // clicked somewhere you can't build
 
     const item = selectedItem();
+    if (item.id === 'sail' && raft.countItems('sail') >= MAX_SAILS) {
+      showToast(`You can only have ${MAX_SAILS} sails`);
+      return;
+    }
     if (!canAfford(item)) {
       showToast(needText(item));
       return;
@@ -261,6 +278,8 @@ window.addEventListener('pointerdown', (e) => {
       rope -= item.rope;
       refreshHud();
       if (item.id === 'net') showToast('Net up! It grabs planks and barrels that float by');
+      if (item.id === 'spikes') showToast('Spikes ready! Let the shark try that tile');
+      if (item.id === 'sail') showToast('Sail up! Your raft is faster now');
     }
     return;
   }
@@ -361,6 +380,7 @@ function animate() {
   followRaft(raftX, raftZ, dt);
   debris.update(dt, t, raftX);
   nets.update(dt, t);
+  sails.update(dt, t);
   hook.update(dt);
   oar.update(dt);
   updateSplashes(dt, t);

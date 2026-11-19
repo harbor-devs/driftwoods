@@ -1,13 +1,24 @@
 import * as THREE from 'three';
-import { TILE_COST, NET_PLANKS, NET_ROPE } from './config.js';
+import {
+  TILE_COST,
+  NET_PLANKS,
+  NET_ROPE,
+  SPIKE_PLANKS,
+  SPIKE_ROPE,
+  SAIL_PLANKS,
+  SAIL_ROPE,
+  MAX_SAILS,
+} from './config.js';
 import { sideAngle } from './raft.js';
 import { makeNet } from './net.js';
+import { makeSpikes } from './spikes.js';
+import { makeSail } from './sail.js';
 
 const GREEN = 0x6ee07a;
 const RED = 0xe06e6e;
 
 // Everything you can build. key = the number key that picks it.
-// Steps 3 and 4 add spikes and sail here.
+// edge = must go on an edge tile. make = the function that builds its 3D model.
 export const BUILD_ITEMS = [
   {
     id: 'tile',
@@ -23,7 +34,29 @@ export const BUILD_ITEMS = [
     name: 'Catch net',
     planks: NET_PLANKS,
     rope: NET_ROPE,
+    edge: true,
+    make: makeNet,
     hint: 'Click an edge tile to hang a net. It catches floating stuff for you',
+  },
+  {
+    id: 'spikes',
+    key: '3',
+    name: 'Spikes',
+    planks: SPIKE_PLANKS,
+    rope: SPIKE_ROPE,
+    edge: true,
+    make: makeSpikes,
+    hint: 'Click an edge tile to add spikes. The shark gets hurt if it bites there',
+  },
+  {
+    id: 'sail',
+    key: '4',
+    name: 'Sail',
+    planks: SAIL_PLANKS,
+    rope: SAIL_ROPE,
+    edge: false,
+    make: makeSail,
+    hint: `Click any free tile to raise a sail. Each one makes you faster (max ${MAX_SAILS})`,
   },
 ];
 
@@ -40,7 +73,7 @@ export function createBuilder(raft) {
   ghost.visible = false;
   raft.group.add(ghost);
 
-  // Ghost for an item: a thin layer on the tile + a wall on the side it will face
+  // Ghost for an item: a thin layer on the tile, plus a wall (edge items) or a mast (sail)
   const ghostItem = new THREE.Group();
   const slab = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.05, 1.9), ghostMat);
   slab.position.y = 0.16;
@@ -48,10 +81,13 @@ export function createBuilder(raft) {
   const wall = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.8, 0.1), ghostMat);
   wall.position.set(0, 0.4, -0.92);
   ghostItem.add(wall);
+  const mast = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.4, 0.15), ghostMat);
+  mast.position.y = 1.2;
+  ghostItem.add(mast);
   ghostItem.visible = false;
   raft.group.add(ghostItem);
 
-  let spot = null; // { gx, gz, itemId } where a click would build
+  let spot = null; // { gx, gz, item } where a click would build
 
   function hide() {
     ghost.visible = false;
@@ -60,24 +96,26 @@ export function createBuilder(raft) {
   }
 
   // Show the right ghost at the grid spot under the mouse, if you can build there
-  function hover(point, itemId, canAfford) {
+  function hover(point, item, canAfford) {
     hide();
     const { gx, gz } = raft.worldToGrid(point);
     ghostMat.color.set(canAfford ? GREEN : RED);
     const p = raft.gridToLocal(gx, gz);
 
-    if (itemId === 'tile') {
+    if (item.id === 'tile') {
       if (!raft.canBuildAt(gx, gz)) return;
       ghost.position.set(p.x, 0, p.z);
       ghost.visible = true;
     } else {
-      if (!raft.canPlaceItemAt(gx, gz)) return;
+      if (!raft.canPlaceItemAt(gx, gz, item.edge)) return;
       ghostItem.position.set(p.x, 0, p.z);
-      ghostItem.rotation.y = sideAngle(raft.openSide(gx, gz));
+      wall.visible = item.edge;
+      mast.visible = !item.edge;
+      ghostItem.rotation.y = item.edge ? sideAngle(raft.openSide(gx, gz)) : 0;
       ghostItem.visible = true;
     }
 
-    spot = { gx, gz, itemId };
+    spot = { gx, gz, item };
   }
 
   function hasSpot() {
@@ -87,12 +125,13 @@ export function createBuilder(raft) {
   // Returns true if something was built
   function place() {
     if (!spot) return false;
+    const { gx, gz, item } = spot;
     let ok = false;
-    if (spot.itemId === 'tile') {
-      raft.addTile(spot.gx, spot.gz);
+    if (item.id === 'tile') {
+      raft.addTile(gx, gz);
       ok = true;
-    } else if (spot.itemId === 'net') {
-      ok = raft.addItem(spot.gx, spot.gz, 'net', makeNet());
+    } else {
+      ok = raft.addItem(gx, gz, item.id, item.make(), item.edge);
     }
     hide();
     return ok;

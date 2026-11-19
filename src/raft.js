@@ -9,6 +9,8 @@ import {
   WORLD_LIMIT,
   FORWARD_LIMIT,
   BACK_LIMIT,
+  SAIL_BOOST,
+  MAX_SAILS,
 } from './config.js';
 import { waveHeight } from './ocean.js';
 
@@ -80,9 +82,9 @@ function makeTile() {
     tile.add(beam);
   }
 
-  // Each tile can hold one item (like a net). Empty for now.
-  tile.userData.item = null; // 'net', later 'spikes' or 'sail'
-  tile.userData.itemSide = null; // which side it faces, like { dx: 0, dz: -1 }
+  // Each tile can hold one item. Empty for now.
+  tile.userData.item = null; // 'net', 'spikes' or 'sail'
+  tile.userData.itemSide = null; // which side it faces, like { dx: 0, dz: -1 } (sails have none)
   tile.userData.itemMesh = null;
 
   return tile;
@@ -192,11 +194,11 @@ export function createRaft(scene) {
     );
   }
 
-  // Is a neighbour's item (like a net) hanging over this empty spot?
+  // Is a neighbour's edge item (net or spikes) hanging over this empty spot?
   function isBlockedByItem(gx, gz) {
     for (const s of SIDES) {
       const n = tiles.get(`${gx + s.dx},${gz + s.dz}`);
-      if (!n || !n.userData.item) continue;
+      if (!n || !n.userData.itemSide) continue; // no item, or an item with no side (sail)
       // The neighbour's item faces back toward this spot
       if (n.userData.itemSide.dx === -s.dx && n.userData.itemSide.dz === -s.dz) return true;
     }
@@ -215,25 +217,46 @@ export function createRaft(scene) {
     return null;
   }
 
-  // Items go on edge tiles that don't have an item yet
-  function canPlaceItemAt(gx, gz) {
+  // needsEdge = true for nets and spikes, false for sails (any free tile)
+  function canPlaceItemAt(gx, gz, needsEdge = true) {
     const tile = tiles.get(`${gx},${gz}`);
     if (!tile || tile.userData.item) return false;
-    return openSide(gx, gz) !== null;
+    if (needsEdge) return openSide(gx, gz) !== null;
+    return true;
   }
 
-  // Puts an item on a tile, turned to face the open side. It's a child of the tile,
-  // so if the shark eats the tile, the item goes with it.
-  function addItem(gx, gz, kind, mesh) {
-    if (!canPlaceItemAt(gx, gz)) return false;
+  // Puts an item on a tile. Edge items get turned to face the open side.
+  // It's a child of the tile, so if the shark eats the tile, the item goes with it.
+  function addItem(gx, gz, kind, mesh, needsEdge = true) {
+    if (!canPlaceItemAt(gx, gz, needsEdge)) return false;
     const tile = tiles.get(`${gx},${gz}`);
-    const side = openSide(gx, gz);
-    mesh.rotation.y = sideAngle(side);
+    let side = null;
+    if (needsEdge) {
+      side = openSide(gx, gz);
+      mesh.rotation.y = sideAngle(side);
+    }
     tile.add(mesh);
     tile.userData.item = kind;
     tile.userData.itemSide = side;
     tile.userData.itemMesh = mesh;
     return true;
+  }
+
+  // Takes the item off a tile (used when spikes break)
+  function removeItem(tile) {
+    if (tile.userData.itemMesh) tile.remove(tile.userData.itemMesh);
+    tile.userData.item = null;
+    tile.userData.itemSide = null;
+    tile.userData.itemMesh = null;
+  }
+
+  // How many of one item the raft has, like countItems('sail')
+  function countItems(kind) {
+    let n = 0;
+    for (const tile of tiles.values()) {
+      if (tile.userData.item === kind) n++;
+    }
+    return n;
   }
 
   // charPos = where the character stands on the raft
@@ -246,8 +269,13 @@ export function createRaft(scene) {
     // Bigger raft = heavier: slower to speed up AND lower top speed
     const extraTiles = Math.max(0, tiles.size - 4);
     const heaviness = 1 + extraTiles * SIZE_SLOWDOWN;
-    const maxSpeed = STEER_MAX_SPEED / heaviness;
-    const accel = STEER_ACCEL / heaviness;
+
+    // Every sail (up to MAX_SAILS) gives a speed boost
+    const sails = Math.min(countItems('sail'), MAX_SAILS);
+    const sailBoost = 1 + sails * SAIL_BOOST;
+
+    const maxSpeed = (STEER_MAX_SPEED / heaviness) * sailBoost;
+    const accel = (STEER_ACCEL / heaviness) * sailBoost;
 
     // Leaning pushes it, water slows it down
     velocity.x += leanX * accel * dt;
@@ -299,8 +327,11 @@ export function createRaft(scene) {
     group,
     tiles,
     center,
+    velocity,
     addTile,
     addItem,
+    removeItem,
+    countItems,
     gridToLocal,
     worldToGrid,
     hasTileAt,
