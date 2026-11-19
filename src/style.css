@@ -12,140 +12,304 @@ canvas {
   cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><path d='M12 3v18M3 12h18' stroke='%232b3a42' stroke-width='5' stroke-linecap='round'/><path d='M12 3v18M3 12h18' stroke='%23ffd27a' stroke-width='2.5' stroke-linecap='round'/></svg>") 12 12, crosshair;
 }
 
+/* ---------- Shared colors and fonts ---------- */
+:root {
+  --wood-top: #c08850;
+  --wood-bottom: #8d5a2e;
+  --wood-edge: #4a2c14;
+  --wood-shadow: #2f1b0b;
+  --cream: #fff3d6;
+  --parchment: #f3e2b8;
+  --ink: #3a2410;
+  --gold: #f4b942;
+  --font-game: 'Lilita One', system-ui, sans-serif;
+  --font-text: 'Nunito', system-ui, sans-serif;
+}
+
+/* ---------- Wooden sign look ---------- */
+/* Layers from top to bottom: left nail, right nail, grain lines, wood color */
+.wood {
+  background:
+    radial-gradient(circle at 12px 50%, var(--wood-shadow) 0 3px, rgba(255, 255, 255, 0.35) 3px 4px, transparent 4.5px),
+    radial-gradient(circle at calc(100% - 12px) 50%, var(--wood-shadow) 0 3px, rgba(255, 255, 255, 0.35) 3px 4px, transparent 4.5px),
+    repeating-linear-gradient(180deg, transparent 0 7px, rgba(60, 30, 10, 0.12) 7px 9px, transparent 9px 15px),
+    linear-gradient(180deg, var(--wood-top), var(--wood-bottom));
+  border: 3px solid var(--wood-edge);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.2),
+    0 4px 0 var(--wood-shadow),
+    0 10px 18px rgba(0, 0, 0, 0.3);
+  color: var(--cream);
+  font-family: var(--font-game);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+  user-select: none;
+}
+
+/* ---------- Old paper look ---------- */
+.parchment {
+  background: linear-gradient(90deg, #e2c98f, var(--parchment) 12%, var(--parchment) 88%, #e2c98f);
+  border: 2px solid #9c7a43;
+  border-radius: 6px;
+  color: var(--ink);
+  font-family: var(--font-game);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+  user-select: none;
+}
+
+/* ---------- Keyboard keys ---------- */
+kbd {
+  display: inline-block;
+  min-width: 16px;
+  padding: 3px 7px;
+  background: linear-gradient(180deg, #fff8e6, #e8d5a8);
+  color: var(--ink);
+  border: 2px solid var(--wood-edge);
+  border-radius: 6px;
+  box-shadow: 0 3px 0 var(--wood-edge);
+  font-family: var(--font-game);
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: center;
+  text-shadow: none;
+}
+
+/* ---------- Planks counter (top left) ---------- */
 #hud {
   position: fixed;
   top: 16px;
   left: 16px;
-  padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 12px;
-  font-family: system-ui, sans-serif;
-  color: #2b3a42;
-  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 28px 6px 26px;
   pointer-events: none;
 }
 
-#hud .count {
-  font-size: 18px;
-  font-weight: 700;
+#hud .icon svg {
+  display: block;
+  width: 34px;
+  height: 34px;
 }
 
-#hud .hint {
-  font-size: 13px;
-  opacity: 0.7;
-  margin-top: 2px;
+#hud .num {
+  font-size: 30px;
+  min-width: 1.2em;
 }
 
-/* ---------- Goals bar (map pieces + raft size) ---------- */
+/* Number turns gold when you have enough planks for a tile */
+#hud.can-build .num {
+  color: var(--gold);
+}
+
+/* Little pop when the number changes */
+#hud.bump {
+  animation: bump 0.3s ease-out;
+}
+
+@keyframes bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+/* ---------- Build mode hint (under the planks counter) ---------- */
+#build-hint {
+  position: fixed;
+  top: 80px;
+  left: 16px;
+  padding: 8px 14px;
+  font-size: 15px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+#build-hint.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ---------- Controls badges (bottom left) ---------- */
+#keys {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  max-width: 60vw;
+  font-family: var(--font-game);
+  font-size: 15px;
+  color: var(--cream);
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  user-select: none;
+}
+
+#keys div {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ---------- Goals board (top middle), hanging from two ropes ---------- */
 #journey {
   position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(360px, 60vw);
-  padding: 8px 14px;
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 12px;
-  font-family: system-ui, sans-serif;
-  color: #2b3a42;
+  top: 34px;
+  right: 16px;
+  width: min(300px, 45vw);
+  padding: 10px 34px 12px;
   pointer-events: none;
-  user-select: none;
 }
 
-#journey .row + .row {
-  margin-top: 8px;
+#journey::before,
+#journey::after {
+  content: '';
+  position: absolute;
+  top: -40px;
+  width: 5px;
+  height: 40px;
+  background: repeating-linear-gradient(180deg, #d9b77a 0 4px, #a5824a 4px 8px);
+  border-radius: 2px;
+}
+
+#journey::before {
+  left: 40px;
+}
+
+#journey::after {
+  right: 40px;
 }
 
 #journey .label {
-  font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 5px;
-}
-
-#journey .slots {
-  display: flex;
-  gap: 8px;
-}
-
-#journey .slot {
-  flex: 1;
-  height: 10px;
-  border-radius: 4px;
-  background: rgba(43, 58, 66, 0.15);
-  transition: background 0.4s;
-}
-
-#journey .slot.found {
-  background: #e0a64a;
-}
-
-#journey .bar {
-  height: 10px;
-  border-radius: 4px;
-  background: rgba(43, 58, 66, 0.15);
-  overflow: hidden;
-}
-
-#journey .fill {
-  height: 100%;
-  width: 0%;
-  background: #2a8fbd;
-  transition: width 0.3s, background 0.4s;
-}
-
-#journey .fill.done {
-  background: #4fb862;
-}
-
-#game-over {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(20, 40, 55, 0.6);
-  color: white;
-  font-family: system-ui, sans-serif;
+  margin: 2px 0 6px;
+  font-size: 16px;
   text-align: center;
 }
 
-#game-over h1 {
-  margin: 0 0 8px;
-  font-size: 40px;
+/* Map pieces: dashed empty spots that turn into paper scraps with an X */
+#journey .scraps {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
-#game-over p {
-  margin: 0 0 20px;
-  opacity: 0.85;
+#journey .scrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 32px;
+  border: 2px dashed rgba(255, 243, 214, 0.45);
+  border-radius: 4px;
+  transition: transform 0.3s, background 0.3s;
 }
 
-#game-over button {
-  padding: 12px 24px;
-  font-size: 16px;
-  font-weight: 700;
-  border: none;
-  border-radius: 10px;
-  background: #ffd27a;
-  color: #2b3a42;
-  cursor: pointer;
+#journey .scrap svg {
+  width: 20px;
+  height: 20px;
+  opacity: 0;
+  transition: opacity 0.3s;
 }
 
+#journey .scrap.found {
+  background: var(--parchment);
+  border: 2px solid #9c7a43;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+#journey .scrap.found svg {
+  opacity: 1;
+}
+
+#journey .scrap:nth-child(1).found { transform: rotate(-6deg); }
+#journey .scrap:nth-child(2).found { transform: rotate(4deg); }
+#journey .scrap:nth-child(3).found { transform: rotate(-2deg); }
+
+/* Raft size: one little plank per tile */
+#journey .cells {
+  display: flex;
+  gap: 4px;
+}
+
+#journey .cell {
+  flex: 1;
+  height: 14px;
+  border-radius: 3px;
+  background: rgba(40, 20, 5, 0.45);
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.4);
+  transition: background 0.3s;
+}
+
+#journey .cell.filled {
+  background: linear-gradient(180deg, #e9c38a, #b98450);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* Goal reached: the planks turn green */
+#journey.ready .cell.filled {
+  background: linear-gradient(180deg, #9be08a, #4fa85c);
+}
+
+/* ---------- Shark warning: red painted plank that shakes ---------- */
+#shark-warning {
+  position: fixed;
+  top: 200px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 22px;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 7px, rgba(0, 0, 0, 0.1) 7px 9px, transparent 9px 15px),
+    linear-gradient(180deg, #d6453a, #9a231b);
+  border: 3px solid #4a1210;
+  border-radius: 8px;
+  box-shadow: 0 4px 0 #2e0b09, 0 10px 18px rgba(0, 0, 0, 0.35);
+  color: var(--cream);
+  font-family: var(--font-game);
+  font-size: 24px;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 0.2s;
+}
+
+#shark-warning svg {
+  width: 30px;
+  height: 30px;
+}
+
+#shark-warning.show {
+  opacity: 1;
+  animation: shark-shake 0.35s ease-in-out infinite;
+}
+
+@keyframes shark-shake {
+  0%, 100% { transform: translateX(-50%) rotate(-3deg); }
+  50% { transform: translateX(-50%) rotate(3deg) scale(1.05); }
+}
+
+/* ---------- Messages (bottom middle) ---------- */
 #toast {
   position: fixed;
-  bottom: 40px;
+  bottom: 70px;
   left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  padding: 10px 18px;
-  background: rgba(20, 40, 55, 0.85);
-  color: white;
-  border-radius: 10px;
-  font-family: system-ui, sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-  opacity: 0;
-  transition: opacity 0.2s, transform 0.2s;
+  max-width: 80vw;
+  padding: 10px 22px;
+  font-size: 19px;
+  text-align: center;
   pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
+  transition: opacity 0.2s, transform 0.2s;
 }
 
 #toast.show {
@@ -153,112 +317,113 @@ canvas {
   transform: translateX(-50%) translateY(0);
 }
 
-/* ---------- Shark warning banner ---------- */
-#shark-warning {
-  position: fixed;
-  top: 110px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 6px 18px;
-  background: rgba(190, 35, 35, 0.9);
-  color: #fff;
-  font-family: system-ui, sans-serif;
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: 3px;
-  border-radius: 6px;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-#shark-warning.show {
-  opacity: 1;
-  animation: shark-pulse 0.5s ease-in-out infinite alternate;
-}
-
-@keyframes shark-pulse {
-  from { transform: translateX(-50%) scale(1); }
-  to { transform: translateX(-50%) scale(1.1); }
-}
-
-/* ---------- Pause menu ---------- */
-#pause-menu {
+/* ---------- Full screen dark background for menus ---------- */
+.overlay {
   position: fixed;
   inset: 0;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(20, 40, 55, 0.6);
-  font-family: system-ui, sans-serif;
-  color: white;
-  user-select: none;
+  background: rgba(10, 30, 45, 0.6);
+  backdrop-filter: blur(3px);
+}
+
+#pause-menu {
+  display: none;
 }
 
 #pause-menu.show {
   display: flex;
 }
 
-#pause-menu .panel {
-  width: min(420px, 88vw);
+/* ---------- Big wooden board (pause and win/lose) ---------- */
+/* Same wood, but with a nail in each corner */
+.wood.board {
+  width: min(440px, 88vw);
+  padding: 22px 30px 24px;
   text-align: center;
+  background:
+    radial-gradient(circle at 14px 14px, var(--wood-shadow) 0 3px, transparent 4px),
+    radial-gradient(circle at calc(100% - 14px) 14px, var(--wood-shadow) 0 3px, transparent 4px),
+    radial-gradient(circle at 14px calc(100% - 14px), var(--wood-shadow) 0 3px, transparent 4px),
+    radial-gradient(circle at calc(100% - 14px) calc(100% - 14px), var(--wood-shadow) 0 3px, transparent 4px),
+    repeating-linear-gradient(180deg, transparent 0 7px, rgba(60, 30, 10, 0.12) 7px 9px, transparent 9px 15px),
+    linear-gradient(180deg, var(--wood-top), var(--wood-bottom));
 }
 
-#pause-menu h1 {
-  margin: 0 0 18px;
-  font-size: 40px;
+.board h1 {
+  margin: 0 0 8px;
+  font-size: 44px;
+  font-weight: 400;
+  letter-spacing: 1px;
 }
 
-#pause-menu .buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  margin-bottom: 24px;
-}
-
-#pause-menu button {
-  padding: 12px 24px;
+.board p {
+  margin: 0 0 20px;
+  font-family: var(--font-text);
   font-size: 16px;
-  font-weight: 700;
-  border-radius: 10px;
-  cursor: pointer;
 }
 
-#pause-menu .resume {
-  border: none;
-  background: #ffd27a;
-  color: #2b3a42;
-}
-
-#pause-menu .restart {
-  border: 2px solid rgba(255, 255, 255, 0.7);
-  background: transparent;
-  color: white;
-}
-
-#pause-menu .controls {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 12px 16px;
-  text-align: left;
-  font-size: 14px;
-}
-
-#pause-menu .controls div {
+.board .buttons {
   display: flex;
+  justify-content: center;
   gap: 12px;
-  padding: 5px 0;
+  margin: 8px 0 20px;
 }
 
-#pause-menu .controls div + div {
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+/* ---------- Chunky wooden buttons ---------- */
+.btn {
+  padding: 12px 26px;
+  font-family: var(--font-game);
+  font-size: 20px;
+  color: var(--ink);
+  background: linear-gradient(180deg, #fff1cf, #e3c88e);
+  border: 3px solid var(--wood-edge);
+  border-radius: 10px;
+  box-shadow: 0 5px 0 var(--wood-edge);
+  cursor: pointer;
+  transition: transform 0.08s, box-shadow 0.08s, filter 0.15s;
 }
 
-#pause-menu .controls b {
-  flex: 0 0 140px;
-  color: #ffd27a;
+.btn:hover {
+  filter: brightness(1.07);
 }
 
-#pause-menu .controls span {
-  opacity: 0.85;
+/* Pressed: the button sinks into its shadow */
+.btn:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--wood-edge);
+}
+
+.btn.primary {
+  background: linear-gradient(180deg, #ffd76e, #f0a830);
+}
+
+/* ---------- Controls list in the pause menu ---------- */
+.board .controls {
+  padding: 10px 14px;
+  background: rgba(40, 20, 5, 0.35);
+  border-radius: 8px;
+  text-align: left;
+  font-family: var(--font-text);
+  font-size: 14px;
+  text-shadow: none;
+}
+
+.board .controls div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.board .controls div + div {
+  border-top: 1px solid rgba(255, 243, 214, 0.15);
+}
+
+.board .controls .keys {
+  flex: 0 0 130px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }

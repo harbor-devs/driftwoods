@@ -1,44 +1,93 @@
 import { TILE_COST } from './config.js';
 
-// ---------- HUD (top left) ----------
+// ---------- Little drawn icons ----------
+const PLANK_ICON = `
+  <svg viewBox="0 0 32 32">
+    <rect x="3" y="10" width="26" height="12" rx="2" fill="#c8894d" stroke="#3a2410" stroke-width="2.5"/>
+    <path d="M7 14h12M11 18h14" stroke="#7a4a22" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="6.5" cy="16" r="1.4" fill="#3a2410"/>
+    <circle cx="25.5" cy="16" r="1.4" fill="#3a2410"/>
+  </svg>`;
+
+const FIN_ICON = `
+  <svg viewBox="0 0 32 32">
+    <path d="M4 26 C12 22 16 12 15 4 C20 10 25 18 28 26 Z" fill="#fff3d6" stroke="#3a1010" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M2 28h28" stroke="#fff3d6" stroke-width="2.5" stroke-linecap="round"/>
+  </svg>`;
+
+const X_MARK = `
+  <svg viewBox="0 0 24 24">
+    <path d="M6 6l12 12M18 6L6 18" stroke="#b3261e" stroke-width="3.5" stroke-linecap="round"/>
+  </svg>`;
+
+// ---------- Planks counter (top left) + controls badges (bottom left) ----------
 export function createHud() {
+  // Wooden sign with the plank count
   const el = document.createElement('div');
   el.id = 'hud';
+  el.className = 'wood';
+  el.innerHTML = `<span class="icon">${PLANK_ICON}</span><span class="num">0</span>`;
   document.body.appendChild(el);
+  const num = el.querySelector('.num');
+
+  // Paper note that only shows in build mode
+  const buildHint = document.createElement('div');
+  buildHint.id = 'build-hint';
+  buildHint.className = 'parchment';
+  buildHint.textContent = `Click next to your raft to add a tile (${TILE_COST} planks)`;
+  document.body.appendChild(buildHint);
+
+  // Small key badges instead of a long sentence
+  const keys = document.createElement('div');
+  keys.id = 'keys';
+  keys.innerHTML = `
+    <div><kbd>WASD</kbd>Walk</div>
+    <div><kbd>L-Click</kbd>Hook</div>
+    <div><kbd>R-Click</kbd><kbd>Space</kbd>Oar</div>
+    <div><kbd>B</kbd><span class="build-label">Build</span></div>
+    <div><kbd>Esc</kbd>Pause</div>
+  `;
+  document.body.appendChild(keys);
+  const buildLabel = keys.querySelector('.build-label');
+
+  let lastPlanks = null;
 
   function update(planks, buildMode) {
-    const hint = buildMode
-      ? `BUILD MODE: click next to your raft to add a tile (${TILE_COST} planks). B to stop building`
-      : 'WASD walk (lean to steer). Left click: hook. Right click or Space: oar. B: build. Esc: pause';
-    el.innerHTML = `
-      <div class="count">Planks: ${planks}</div>
-      <div class="hint">${hint}</div>
-    `;
+    if (planks !== lastPlanks) {
+      num.textContent = planks;
+      // Pop animation (skip it the very first time)
+      if (lastPlanks !== null) {
+        el.classList.remove('bump');
+        void el.offsetWidth; // restarts the animation
+        el.classList.add('bump');
+      }
+      lastPlanks = planks;
+    }
+    el.classList.toggle('can-build', planks >= TILE_COST);
+    buildHint.classList.toggle('show', buildMode);
+    buildLabel.textContent = buildMode ? 'Stop building' : 'Build';
   }
 
   return { update };
 }
 
-// ---------- Goals bar (top middle): map pieces + raft size ----------
+// ---------- Goals board (top middle): map pieces + raft size ----------
 export function createMapBar(totalPieces, raftGoal) {
   const el = document.createElement('div');
   el.id = 'journey';
+  el.className = 'wood';
   el.innerHTML = `
-    <div class="row">
-      <div class="label map-label"></div>
-      <div class="slots">${'<div class="slot"></div>'.repeat(totalPieces)}</div>
-    </div>
-    <div class="row">
-      <div class="label raft-label"></div>
-      <div class="bar"><div class="fill"></div></div>
-    </div>
+    <div class="label map-label"></div>
+    <div class="scraps">${`<div class="scrap">${X_MARK}</div>`.repeat(totalPieces)}</div>
+    <div class="label raft-label"></div>
+    <div class="cells">${'<div class="cell"></div>'.repeat(raftGoal)}</div>
   `;
   document.body.appendChild(el);
 
   const mapLabel = el.querySelector('.map-label');
   const raftLabel = el.querySelector('.raft-label');
-  const slots = el.querySelectorAll('.slot');
-  const fill = el.querySelector('.fill');
+  const scraps = el.querySelectorAll('.scrap');
+  const cells = el.querySelectorAll('.cell');
 
   let last = ''; // so we only update the page when something changed
 
@@ -47,27 +96,25 @@ export function createMapBar(totalPieces, raftGoal) {
     if (key === last) return;
     last = key;
 
-    if (revealed) mapLabel.textContent = 'Follow the green arrow to the island!';
+    if (revealed) mapLabel.textContent = 'Follow the green arrow!';
     else if (pieces >= totalPieces) mapLabel.textContent = 'Map complete!';
-    else mapLabel.textContent = `Map pieces: ${pieces} / ${totalPieces}`;
-    slots.forEach((slot, i) => slot.classList.toggle('found', i < pieces));
+    else mapLabel.textContent = `Map pieces ${pieces} / ${totalPieces}`;
+    scraps.forEach((scrap, i) => scrap.classList.toggle('found', i < pieces));
 
     const ready = tiles >= raftGoal;
-    raftLabel.textContent = ready
-      ? `Raft: ${tiles} / ${raftGoal} tiles, ready to sail`
-      : `Raft: ${tiles} / ${raftGoal} tiles`;
-    fill.style.width = `${Math.min(tiles / raftGoal, 1) * 100}%`;
-    fill.classList.toggle('done', ready);
+    raftLabel.textContent = ready ? 'Raft ready to sail!' : `Raft ${tiles} / ${raftGoal} tiles`;
+    cells.forEach((cell, i) => cell.classList.toggle('filled', i < tiles));
+    el.classList.toggle('ready', ready);
   }
 
   return { set };
 }
 
-// ---------- Shark warning (top middle, under the goals bar) ----------
+// ---------- Shark warning (red plank under the goals board) ----------
 export function createSharkWarning() {
   const el = document.createElement('div');
   el.id = 'shark-warning';
-  el.textContent = 'SHARK!';
+  el.innerHTML = `${FIN_ICON}<span>SHARK!</span>`;
   document.body.appendChild(el);
 
   let showing = false;
@@ -82,7 +129,7 @@ export function createSharkWarning() {
   return { set };
 }
 
-// ---------- Popup message (bottom middle) ----------
+// ---------- Message on a paper scroll (bottom middle) ----------
 let toastTimeout = null;
 
 export function showToast(text) {
@@ -90,6 +137,7 @@ export function showToast(text) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'toast';
+    el.className = 'parchment';
     document.body.appendChild(el);
   }
   el.textContent = text;
@@ -103,10 +151,15 @@ export function showToast(text) {
 export function showEndScreen(title, text) {
   const box = document.createElement('div');
   box.id = 'game-over';
+  box.className = 'overlay';
   box.innerHTML = `
-    <h1>${title}</h1>
-    <p>${text}</p>
-    <button id="restart">Play again</button>
+    <div class="wood board">
+      <h1>${title}</h1>
+      <p>${text}</p>
+      <div class="buttons">
+        <button class="btn primary" id="restart">Play again</button>
+      </div>
+    </div>
   `;
   document.body.appendChild(box);
   document.getElementById('restart').addEventListener('click', () => location.reload());
@@ -117,19 +170,20 @@ export function showEndScreen(title, text) {
 export function createPauseMenu({ onResume, onRestart }) {
   const el = document.createElement('div');
   el.id = 'pause-menu';
+  el.className = 'overlay';
   el.innerHTML = `
-    <div class="panel">
+    <div class="wood board">
       <h1>Paused</h1>
       <div class="buttons">
-        <button class="resume">Resume</button>
-        <button class="restart">Restart</button>
+        <button class="btn primary resume">Resume</button>
+        <button class="btn restart">Restart</button>
       </div>
       <div class="controls">
-        <div><b>WASD / Arrows</b><span>Walk. Stand near an edge to lean and steer the raft</span></div>
-        <div><b>Left click</b><span>Throw the hook</span></div>
-        <div><b>Right click / Space</b><span>Swing the oar</span></div>
-        <div><b>B</b><span>Build mode</span></div>
-        <div><b>Esc / P</b><span>Pause and resume</span></div>
+        <div><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Walk (or arrow keys). Stand near an edge to lean and steer the raft</span></div>
+        <div><span class="keys"><kbd>L-Click</kbd></span><span>Throw the hook</span></div>
+        <div><span class="keys"><kbd>R-Click</kbd><kbd>Space</kbd></span><span>Swing the oar</span></div>
+        <div><span class="keys"><kbd>B</kbd></span><span>Build mode</span></div>
+        <div><span class="keys"><kbd>Esc</kbd><kbd>P</kbd></span><span>Pause and resume</span></div>
       </div>
     </div>
   `;
