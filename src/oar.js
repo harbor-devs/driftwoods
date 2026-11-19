@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { splash } from './splash.js';
 
 // ---------- Oar settings ----------
 const SWING_TIME = 0.4; // whole swing: wind up, slam, hold, recover
@@ -48,42 +49,6 @@ export function createOar(scene, character, shark, onHit) {
 
   pivot.rotation.x = REST;
 
-  // ---------- Splash particles ----------
-  const dropGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
-  const dropMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true });
-  const drops = [];
-
-  function splash(at, count) {
-    for (let i = 0; i < count; i++) {
-      const mesh = new THREE.Mesh(dropGeo, dropMat);
-      mesh.position.copy(at);
-      scene.add(mesh);
-      drops.push({
-        mesh,
-        velocity: new THREE.Vector3(
-          (Math.random() - 0.5) * 4,
-          3 + Math.random() * 3,
-          (Math.random() - 0.5) * 4
-        ),
-        life: 0.6,
-      });
-    }
-  }
-
-  function updateDrops(dt) {
-    for (let i = drops.length - 1; i >= 0; i--) {
-      const d = drops[i];
-      d.velocity.y -= 12 * dt; // gravity
-      d.mesh.position.addScaledVector(d.velocity, dt);
-      d.life -= dt;
-      d.mesh.scale.setScalar(Math.max(d.life / 0.6, 0.01)); // shrink away
-      if (d.life <= 0) {
-        scene.remove(d.mesh);
-        drops.splice(i, 1);
-      }
-    }
-  }
-
   // ---------- Swing ----------
   let cooldown = 0;
   let swingTime = 0; // time left in the current swing
@@ -120,13 +85,11 @@ export function createOar(scene, character, shark, onHit) {
       }
     }
 
-    impact.y = 0.2;
-    splash(impact, hit ? 18 : 8); // bigger splash when you connect
+    splash(impact, hit ? 'big' : 'medium'); // bigger splash when you connect
   }
 
   function update(dt) {
     cooldown = Math.max(0, cooldown - dt);
-    updateDrops(dt);
 
     // Ready again and a click is waiting? Go.
     if (cooldown <= 0 && queuedAngle !== null) {

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { splash } from './splash.js';
 
 // ---------- Shark settings ----------
 const CIRCLE_RADIUS = 9; // how far from the raft it circles
@@ -7,6 +8,7 @@ const CIRCLE_SPEED = 0.35; // how fast it goes around
 const SWIM_SPEED = 7.5; // faster than the raft, so you can't outrun it forever
 const BITE_TIME = 2; // seconds it chews before the tile is gone
 const BITE_ESCAPE = 2.5; // if the tile gets this far away, the bite is cancelled
+const BITE_SPLASH_EVERY = 0.3; // seconds between little splashes while it chews
 const FIRST_ATTACK = 15; // seconds before the first attack
 const MAX_HEALTH = 3; // oar hits to kill it
 const FLEE_TIME = 3; // seconds it swims away after getting hit
@@ -93,6 +95,7 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
   let angle = 0;
   let attackTimer = FIRST_ATTACK;
   let biteTimer = 0;
+  let biteSplashTimer = 0; // counts down to the next chewing splash
   let timer = 0; // used by fleeing, away and dead
   let target = null; // { key, tile }
   let health = MAX_HEALTH;
@@ -247,6 +250,8 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
         if (distXZ(pos, goal) < 1.5) {
           state = 'biting';
           biteTimer = BITE_TIME;
+          biteSplashTimer = BITE_SPLASH_EVERY;
+          splash(pos, 'medium'); // it lunges at the raft
           onEvent('bite');
         }
       }
@@ -265,7 +270,15 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
           biteTimer -= dt;
           target.tile.rotation.y = Math.sin(t * 40) * 0.08; // tile shakes
 
+          // Little splashes while it thrashes and chews
+          biteSplashTimer -= dt;
+          if (biteSplashTimer <= 0) {
+            biteSplashTimer = BITE_SPLASH_EVERY;
+            splash(pos, 'small');
+          }
+
           if (biteTimer <= 0) {
+            splash(w, 'big'); // the tile gets ripped off
             raft.remove(target.tile);
             tiles.delete(target.key);
             target = null;

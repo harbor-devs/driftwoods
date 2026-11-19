@@ -12,6 +12,7 @@ import { createShark } from './shark.js';
 import { createOar } from './oar.js';
 import { createIsland } from './island.js';
 import { createGuide } from './guide.js';
+import { initSplashes, updateSplashes } from './splash.js';
 import {
   createHud,
   createMapBar,
@@ -43,6 +44,7 @@ function sideName(side) {
 
 // ---------- Create everything ----------
 const ocean = createOcean(scene);
+initSplashes(scene);
 const raft = createRaft(scene);
 const character = createCharacter(raft);
 const builder = createBuilder(raft);
@@ -300,6 +302,7 @@ function animate() {
   debris.update(dt, t, raftX);
   hook.update(dt);
   oar.update(dt);
+  updateSplashes(dt, t);
 
   if (!gameEnded) {
     shark.update(dt, t);

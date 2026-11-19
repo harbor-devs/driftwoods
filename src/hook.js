@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { HOOK_SPEED, HOOK_RANGE, CATCH_RADIUS } from './config.js';
+import { splash } from './splash.js';
 
 const HOOK_SCALE = 1.5; // make the hook bigger so you can see it from the top camera
 const HOOK_HEIGHT = 1.2; // how high above the water it flies
@@ -106,6 +107,7 @@ export function createHook(scene, origin, debris, onCatch) {
         d.hooked = true;
         caught = d;
         state = 'back';
+        splash(d.mesh.position, 'small'); // yanked out of the water
         return;
       }
     }
@@ -125,7 +127,10 @@ export function createHook(scene, origin, debris, onCatch) {
     if (state === 'out') {
       moveTowards(pos, target, HOOK_SPEED * dt);
       tryCatch();
-      if (state === 'out' && pos.distanceTo(target) < 0.1) state = 'back';
+      if (state === 'out' && pos.distanceTo(target) < 0.1) {
+        splash(pos, 'medium'); // the hook lands in the water
+        state = 'back';
+      }
     } else if (state === 'back') {
       moveTowards(pos, origin, HOOK_SPEED * 0.6 * dt);
       if (!caught) tryCatch();
