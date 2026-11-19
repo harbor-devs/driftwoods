@@ -76,15 +76,28 @@ kbd {
 }
 
 /* ---------- Planks counter (top left) ---------- */
+/* ---------- Planks + rope counter (top left) ---------- */
 #hud {
   position: fixed;
   top: 16px;
   left: 16px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 16px;
   padding: 6px 28px 6px 26px;
   pointer-events: none;
+}
+
+#hud .count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Thin dark line between planks and rope */
+#hud .rope {
+  padding-left: 16px;
+  border-left: 2px solid rgba(40, 20, 5, 0.4);
 }
 
 #hud .icon svg {
@@ -98,13 +111,13 @@ kbd {
   min-width: 1.2em;
 }
 
-/* Number turns gold when you have enough planks for a tile */
-#hud.can-build .num {
+/* Plank number turns gold when you have enough planks for a tile */
+#hud.can-build .planks .num {
   color: var(--gold);
 }
 
-/* Little pop when the number changes */
-#hud.bump {
+/* Little pop when a number changes */
+#hud .count.bump {
   animation: bump 0.3s ease-out;
 }
 

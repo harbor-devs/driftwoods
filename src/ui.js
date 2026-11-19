@@ -9,6 +9,16 @@ const PLANK_ICON = `
     <circle cx="25.5" cy="16" r="1.4" fill="#3a2410"/>
   </svg>`;
 
+// A coil of rope with a loose end
+const ROPE_ICON = `
+  <svg viewBox="0 0 32 32">
+    <path d="M23 23 L29 29" stroke="#3a2410" stroke-width="5" stroke-linecap="round"/>
+    <path d="M23 23 L29 29" stroke="#d9b77a" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="15" cy="15" r="11" fill="#d9b77a" stroke="#3a2410" stroke-width="2.5"/>
+    <circle cx="15" cy="15" r="6.5" fill="none" stroke="#a5824a" stroke-width="2.5"/>
+    <circle cx="15" cy="15" r="2.2" fill="#3a2410"/>
+  </svg>`;
+
 const FIN_ICON = `
   <svg viewBox="0 0 32 32">
     <path d="M4 26 C12 22 16 12 15 4 C20 10 25 18 28 26 Z" fill="#fff3d6" stroke="#3a1010" stroke-width="2.5" stroke-linejoin="round"/>
@@ -20,15 +30,28 @@ const X_MARK = `
     <path d="M6 6l12 12M18 6L6 18" stroke="#b3261e" stroke-width="3.5" stroke-linecap="round"/>
   </svg>`;
 
-// ---------- Planks counter (top left) + controls badges (bottom left) ----------
+// Replays the little pop animation on one counter
+function bump(box) {
+  box.classList.remove('bump');
+  void box.offsetWidth; // restarts the animation
+  box.classList.add('bump');
+}
+
+// ---------- Planks + rope counter (top left) + controls badges (bottom left) ----------
 export function createHud() {
-  // Wooden sign with the plank count
+  // Wooden sign with the plank count and the rope count
   const el = document.createElement('div');
   el.id = 'hud';
   el.className = 'wood';
-  el.innerHTML = `<span class="icon">${PLANK_ICON}</span><span class="num">0</span>`;
+  el.innerHTML = `
+    <span class="count planks"><span class="icon">${PLANK_ICON}</span><span class="num">0</span></span>
+    <span class="count rope"><span class="icon">${ROPE_ICON}</span><span class="num">0</span></span>
+  `;
   document.body.appendChild(el);
-  const num = el.querySelector('.num');
+  const plankBox = el.querySelector('.planks');
+  const plankNum = plankBox.querySelector('.num');
+  const ropeBox = el.querySelector('.rope');
+  const ropeNum = ropeBox.querySelector('.num');
 
   // Paper note that only shows in build mode
   const buildHint = document.createElement('div');
@@ -51,17 +74,18 @@ export function createHud() {
   const buildLabel = keys.querySelector('.build-label');
 
   let lastPlanks = null;
+  let lastRope = null;
 
-  function update(planks, buildMode) {
+  function update(planks, rope, buildMode) {
     if (planks !== lastPlanks) {
-      num.textContent = planks;
-      // Pop animation (skip it the very first time)
-      if (lastPlanks !== null) {
-        el.classList.remove('bump');
-        void el.offsetWidth; // restarts the animation
-        el.classList.add('bump');
-      }
+      plankNum.textContent = planks;
+      if (lastPlanks !== null) bump(plankBox); // skip the pop the very first time
       lastPlanks = planks;
+    }
+    if (rope !== lastRope) {
+      ropeNum.textContent = rope;
+      if (lastRope !== null) bump(ropeBox);
+      lastRope = rope;
     }
     el.classList.toggle('can-build', planks >= TILE_COST);
     buildHint.classList.toggle('show', buildMode);
@@ -71,7 +95,7 @@ export function createHud() {
   return { update };
 }
 
-// ---------- Goals board (top middle): map pieces + raft size ----------
+// ---------- Goals board (top right): map pieces + raft size ----------
 export function createMapBar(totalPieces, raftGoal) {
   const el = document.createElement('div');
   el.id = 'journey';

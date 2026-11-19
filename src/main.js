@@ -26,9 +26,11 @@ import {
 const MAP_PIECES = 3; // bottles you need to find
 const RAFT_GOAL = 10; // tiles your raft needs before you can sail to the island
 const BEACH_REACH = 10.5; // a tile this close to the island's middle = touching the beach
+const BARREL_ROPE = 2; // rope you get from one barrel
 
 // ---------- Game state ----------
 let planks = 0;
+let rope = 0;
 let buildMode = false;
 let mapPieces = 0;
 let islandRevealed = false;
@@ -78,6 +80,11 @@ const hook = createHook(scene, character.hand, debris, (kind) => {
   if (kind === 'plank') {
     planks++;
     refreshHud();
+  }
+  if (kind === 'barrel') {
+    rope += BARREL_ROPE;
+    refreshHud();
+    showToast(`A barrel! +${BARREL_ROPE} rope`);
   }
   if (kind === 'bottle') foundMapPiece();
 });
@@ -136,7 +143,7 @@ function getGuideTarget() {
 }
 
 function refreshHud() {
-  hud.update(planks, buildMode);
+  hud.update(planks, rope, buildMode);
 }
 refreshHud();
 

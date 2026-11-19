@@ -10,6 +10,9 @@ const BOTTLE_MAX = 35; // max seconds between bottles
 const BOTTLE_SIDE_MIN = 12; // how far to the side a bottle spawns (min)
 const BOTTLE_SIDE_MAX = 18; // (max), so you have to steer to reach it
 
+// ---------- Barrel settings ----------
+const BARREL_CHANCE = 0.12; // each time something spawns, this is the chance it's a barrel
+
 function randomBetween(min, max) {
   return min + Math.random() * (max - min);
 }
@@ -45,6 +48,34 @@ const ringMat = new THREE.MeshBasicMaterial({
   depthWrite: false,
 });
 
+// Barrel: a side view of a barrel (fat in the middle), spun around to make it round.
+// Each point is (distance from the middle, height).
+const barrelProfile = [
+  new THREE.Vector2(0, -0.45),
+  new THREE.Vector2(0.32, -0.45),
+  new THREE.Vector2(0.38, -0.22),
+  new THREE.Vector2(0.4, 0),
+  new THREE.Vector2(0.38, 0.22),
+  new THREE.Vector2(0.32, 0.45),
+  new THREE.Vector2(0, 0.45),
+];
+const barrelGeo = new THREE.LatheGeometry(barrelProfile, 10); // 10 sides = low-poly look
+const barrelMat = new THREE.MeshStandardMaterial({
+  color: 0x8f5c2f,
+  flatShading: true,
+  roughness: 0.85,
+  side: THREE.DoubleSide,
+});
+// Dark iron bands around the barrel (two in the middle, two near the ends)
+const bandGeo = new THREE.TorusGeometry(0.385, 0.035, 4, 10);
+const endBandGeo = new THREE.TorusGeometry(0.335, 0.035, 4, 10);
+const bandMat = new THREE.MeshStandardMaterial({
+  color: 0x3d3b40,
+  metalness: 0.4,
+  roughness: 0.5,
+  flatShading: true,
+});
+
 function makeBottle() {
   const group = new THREE.Group(); // follows the waves
   const bottle = new THREE.Group(); // lies on its side and rolls
@@ -74,6 +105,35 @@ function makeBottle() {
   return { group, bottle, ring };
 }
 
+function makeBarrel() {
+  const group = new THREE.Group(); // follows the waves, turned a random way
+  const lying = new THREE.Group(); // tips the barrel onto its side
+  lying.rotation.z = Math.PI / 2;
+  group.add(lying);
+  const roll = new THREE.Group(); // spins around the barrel's long middle line
+  lying.add(roll);
+
+  const body = new THREE.Mesh(barrelGeo, barrelMat);
+  body.castShadow = true;
+  roll.add(body);
+
+  for (const y of [-0.22, 0.22]) {
+    const band = new THREE.Mesh(bandGeo, bandMat);
+    band.rotation.x = Math.PI / 2; // wrap around the barrel
+    band.position.y = y;
+    roll.add(band);
+  }
+  for (const y of [-0.4, 0.4]) {
+    const band = new THREE.Mesh(endBandGeo, bandMat);
+    band.rotation.x = Math.PI / 2;
+    band.position.y = y;
+    roll.add(band);
+  }
+
+  group.rotation.y = Math.random() * Math.PI;
+  return { group, roll };
+}
+
 // onEvent gets called with ('bottleSpawned', side) or ('bottleMissed')
 // side is -1 for left, 1 for right
 export function createDebris(scene, onEvent = () => {}) {
@@ -93,6 +153,19 @@ export function createDebris(scene, onEvent = () => {}) {
     scene.add(mesh);
     // phase = each plank rocks a bit differently, so they don't move in sync
     list.push({ mesh, hooked: false, kind: 'plank', phase: Math.random() * Math.PI * 2 });
+  }
+
+  function spawnBarrel(raftX) {
+    const b = makeBarrel();
+    b.group.position.set(raftX + (Math.random() - 0.5) * 30, 0, -45);
+    scene.add(b.group);
+    list.push({
+      mesh: b.group,
+      roll: b.roll,
+      hooked: false,
+      kind: 'barrel',
+      phase: Math.random() * Math.PI * 2,
+    });
   }
 
   function spawnBottle(raftX) {
@@ -136,7 +209,8 @@ export function createDebris(scene, onEvent = () => {}) {
     if (spawning) {
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
-        spawnPlank(raftX);
+        if (Math.random() < BARREL_CHANCE) spawnBarrel(raftX);
+        else spawnPlank(raftX);
         spawnTimer = 1 + Math.random() * 1.5;
       }
     }
@@ -169,6 +243,11 @@ export function createDebris(scene, onEvent = () => {}) {
         d.mesh.position.y = waveHeight(d.mesh.position.x, d.mesh.position.z, t) + 0.1;
         d.bottle.rotation.x = Math.sin(t * 1.5) * 0.3; // rolls with the waves
         d.ring.scale.set(pulse, pulse, pulse);
+      } else if (d.kind === 'barrel') {
+        // Heavy, so it sits half under the water and rolls slowly back and forth
+        d.mesh.position.y = waveHeight(d.mesh.position.x, d.mesh.position.z, t) + 0.1;
+        d.roll.rotation.y = Math.sin(t * 1.2 + d.phase) * 0.5;
+        d.mesh.rotation.x = Math.sin(t * 1.1 + d.phase) * 0.08;
       } else {
         d.mesh.position.y = waveHeight(d.mesh.position.x, d.mesh.position.z, t) + 0.05;
         // Rock and tilt with the waves

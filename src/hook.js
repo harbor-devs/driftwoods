@@ -5,6 +5,8 @@ import { splash } from './splash.js';
 const HOOK_SCALE = 1.5; // make the hook bigger so you can see it from the top camera
 const HOOK_HEIGHT = 1.2; // how high above the water it flies
 const CARRY_DROP = 0.8; // caught things hang this far below the hook's eye
+const REEL_SPEED = 0.6; // reeling in is this much slower than throwing
+const HEAVY_REEL_SPEED = 0.35; // barrels are heavy, so even slower
 
 // Moves "current" toward "target" by at most "maxStep"
 function moveTowards(current, target, maxStep) {
@@ -62,7 +64,7 @@ function makeHookMesh() {
 }
 
 // origin = where the hook is thrown from and comes back to (the character's hands)
-// onCatch(kind) runs every time something reaches him. kind is 'plank' or 'bottle'
+// onCatch(kind) runs every time something reaches him. kind is 'plank', 'barrel' or 'bottle'
 export function createHook(scene, origin, debris, onCatch) {
   const mesh = makeHookMesh();
   mesh.visible = false;
@@ -107,7 +109,8 @@ export function createHook(scene, origin, debris, onCatch) {
         d.hooked = true;
         caught = d;
         state = 'back';
-        splash(d.mesh.position, 'small'); // yanked out of the water
+        // yanked out of the water (a barrel is big, so a bigger splash)
+        splash(d.mesh.position, d.kind === 'barrel' ? 'medium' : 'small');
         return;
       }
     }
@@ -132,7 +135,9 @@ export function createHook(scene, origin, debris, onCatch) {
         state = 'back';
       }
     } else if (state === 'back') {
-      moveTowards(pos, origin, HOOK_SPEED * 0.6 * dt);
+      const heavy = caught && caught.kind === 'barrel';
+      const reel = heavy ? HEAVY_REEL_SPEED : REEL_SPEED;
+      moveTowards(pos, origin, HOOK_SPEED * reel * dt);
       if (!caught) tryCatch();
 
       if (pos.distanceTo(origin) < 0.5) {
