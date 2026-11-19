@@ -12,20 +12,60 @@ import {
 } from './config.js';
 import { waveHeight } from './ocean.js';
 
-const woodLight = new THREE.MeshStandardMaterial({ color: 0xc8955c, flatShading: true });
-const woodDark = new THREE.MeshStandardMaterial({ color: 0xa8743f, flatShading: true });
+// ---------- Wood ----------
+// Different wood shades, so the raft looks hand-built from random scraps
+const WOOD_COLORS = [
+  0xc8955c, // light
+  0xb98349, // honey
+  0xa8743f, // medium
+  0xd3a46c, // pale
+  0x9a6a3a, // dark
+  0x9c8f7c, // old grey, sun-bleached
+];
+const woodMats = WOOD_COLORS.map(
+  (color) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.9 })
+);
+
+// debris.js uses this too, so floating planks match the raft
+export function randomWoodMaterial() {
+  return woodMats[Math.floor(Math.random() * woodMats.length)];
+}
+
 const plankGeo = new THREE.BoxGeometry(0.62, 0.25, 1.9);
 
-// One raft tile = 3 planks side by side
+// Dark crossbeams under the planks that hold a tile together
+const beamGeo = new THREE.BoxGeometry(1.95, 0.12, 0.18);
+const beamMat = new THREE.MeshStandardMaterial({
+  color: 0x6e4a2a,
+  flatShading: true,
+  roughness: 0.9,
+});
+
+// One raft tile = 3 planks side by side, on 2 crossbeams
 function makeTile() {
   const tile = new THREE.Group();
+
   for (let i = 0; i < 3; i++) {
-    const plank = new THREE.Mesh(plankGeo, i % 2 === 0 ? woodLight : woodDark);
-    plank.position.x = (i - 1) * 0.64;
+    const plank = new THREE.Mesh(plankGeo, randomWoodMaterial());
+    plank.scale.z = 0.95 + Math.random() * 0.08; // slightly different lengths
+    plank.position.set(
+      (i - 1) * 0.64,
+      (Math.random() - 0.5) * 0.03, // tiny height differences
+      (Math.random() - 0.5) * 0.06 // not perfectly lined up
+    );
+    plank.rotation.y = (Math.random() - 0.5) * 0.03; // very slightly crooked
     plank.castShadow = true;
     plank.receiveShadow = true;
     tile.add(plank);
   }
+
+  for (const side of [-1, 1]) {
+    const beam = new THREE.Mesh(beamGeo, beamMat);
+    beam.position.set(0, -0.185, side * 0.6);
+    beam.castShadow = true;
+    tile.add(beam);
+  }
+
   return tile;
 }
 

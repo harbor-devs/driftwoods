@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { DRIFT_SPEED, WORLD_LIMIT } from './config.js';
 import { waveHeight } from './ocean.js';
+import { randomWoodMaterial } from './raft.js';
 
 // ---------- Bottle settings ----------
 const BOTTLE_FIRST = 20; // seconds before the first bottle shows up
@@ -15,7 +16,6 @@ function randomBetween(min, max) {
 
 // ---------- Shared shapes and materials (made once, reused, cheaper) ----------
 const plankGeo = new THREE.BoxGeometry(1.6, 0.2, 0.4);
-const plankMat = new THREE.MeshStandardMaterial({ color: 0xa8743f, flatShading: true });
 
 const glassMat = new THREE.MeshStandardMaterial({
   color: 0x7fd6b0,
@@ -84,13 +84,15 @@ export function createDebris(scene, onEvent = () => {}) {
   let bottlesOn = true;
 
   function spawnPlank(raftX) {
-    const mesh = new THREE.Mesh(plankGeo, plankMat);
+    const mesh = new THREE.Mesh(plankGeo, randomWoodMaterial()); // random wood shade
+    mesh.scale.x = 0.85 + Math.random() * 0.3; // some longer, some shorter
     // Spawn around the raft, wherever it has steered to
     mesh.position.set(raftX + (Math.random() - 0.5) * 30, 0, -45);
     mesh.rotation.y = Math.random() * Math.PI;
     mesh.castShadow = true;
     scene.add(mesh);
-    list.push({ mesh, hooked: false, kind: 'plank' });
+    // phase = each plank rocks a bit differently, so they don't move in sync
+    list.push({ mesh, hooked: false, kind: 'plank', phase: Math.random() * Math.PI * 2 });
   }
 
   function spawnBottle(raftX) {
@@ -169,6 +171,9 @@ export function createDebris(scene, onEvent = () => {}) {
         d.ring.scale.set(pulse, pulse, pulse);
       } else {
         d.mesh.position.y = waveHeight(d.mesh.position.x, d.mesh.position.z, t) + 0.05;
+        // Rock and tilt with the waves
+        d.mesh.rotation.x = Math.sin(t * 1.1 + d.phase) * 0.12;
+        d.mesh.rotation.z = Math.cos(t * 1.4 + d.phase) * 0.15;
       }
 
       if (d.mesh.position.z > 30) {
