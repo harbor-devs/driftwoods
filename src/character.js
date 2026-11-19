@@ -63,12 +63,6 @@ export function createCharacter(raft) {
     forceTimer = holdTime;
   }
 
-  // First person hides his body so the camera isn't inside it (the oar stays visible)
-  function setBodyVisible(visible) {
-    wobble.visible = visible;
-    for (const foot of feet) foot.visible = visible;
-  }
-
   // input is { x, z }, each between -1 and 1
   function update(dt, t, input) {
     // Same speed going diagonally as straight
@@ -162,7 +156,6 @@ export function createCharacter(raft) {
   return {
     update,
     faceDirection,
-    setBodyVisible,
     root,
     position: root.position,
     worldPos,
