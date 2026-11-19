@@ -16,12 +16,15 @@ import { createOar } from './oar.js';
 import { createIsland } from './island.js';
 import { createGuide } from './guide.js';
 import { initSplashes, updateSplashes } from './splash.js';
+import { initTileBreak, spawnTileBreak, updateTileBreak } from './tilebreak.js';
+import { unlockSound, playSound, toggleMute, setSoundPaused } from './sound.js';
 import {
   createHud,
   createBuildMenu,
   createMapBar,
   createSharkWarning,
   createPauseMenu,
+  createStartScreen,
   showToast,
   showEndScreen,
 } from './ui.js';
@@ -41,6 +44,7 @@ let mapPieces = 0;
 let islandRevealed = false;
 let gameEnded = false;
 let paused = false;
+let started = false; // stays false until you press Start
 let gameTime = 0; // game clock in seconds, only ticks while NOT paused
 let steerHintShown = false;
 let buildHintShown = false;
@@ -52,6 +56,7 @@ function sideName(side) {
 // ---------- Create everything ----------
 const ocean = createOcean(scene);
 initSplashes(scene);
+initTileBreak(scene);
 const raft = createRaft(scene);
 const character = createCharacter(raft);
 const builder = createBuilder(raft);
@@ -68,20 +73,45 @@ const pauseMenu = createPauseMenu({
   onRestart: () => location.reload(),
 });
 
+// The start screen. The game doesn't begin until you press Start.
+const startScreen = createStartScreen({
+  mapPieces: MAP_PIECES,
+  raftGoal: RAFT_GOAL,
+  onStart: startGame,
+});
+
+function startGame() {
+  if (started) return;
+  started = true;
+  unlockSound(); // browsers only allow sound after a click
+  startScreen.hide();
+  lastTime = performance.now(); // don't count the time spent on the start screen
+}
+
 const debris = createDebris(scene, (event, side) => {
-  if (event === 'bottleSpawned') showToast(`A bottle! Far to your ${sideName(side)}`);
+  if (event === 'bottleSpawned') {
+    showToast(`A bottle! Far to your ${sideName(side)}`);
+    playSound('chime');
+  }
   if (event === 'bottleMissed') showToast('The bottle drifted away. Another will come');
 });
 
 // The shark tells us what it's doing, and we decide how it feels
 const shark = createShark(scene, raft.group, raft.tiles, waveHeight, (event, data) => {
-  if (event === 'bite') shakeCamera(0.25);
+  if (event === 'attack') playSound('alarm');
+  if (event === 'bite') {
+    shakeCamera(0.25);
+    playSound('bite');
+  }
   if (event === 'tileLost') {
     shakeCamera(0.6);
     showToast('The shark ate a tile!');
+    spawnTileBreak(data.x, data.z);
+    playSound('tileBreak');
   }
   if (event === 'spiked') {
     shakeCamera(0.4);
+    playSound('spike');
     const broke = damageSpikes(data.tile.userData.itemMesh);
     if (broke) raft.removeItem(data.tile);
 
@@ -95,10 +125,15 @@ const shark = createShark(scene, raft.group, raft.tiles, waveHeight, (event, dat
 function collect(kind) {
   if (kind === 'bottle') {
     foundMapPiece();
+    playSound('bottle');
     return;
   }
-  if (kind === 'plank') planks++;
+  if (kind === 'plank') {
+    planks++;
+    playSound('pickup');
+  }
   if (kind === 'barrel') {
+    playSound('barrel');
     rope += BARREL_ROPE;
     showToast(`A barrel! +${BARREL_ROPE} rope`);
   }
@@ -115,10 +150,12 @@ const nets = createNets(raft, debris, collect);
 const oar = createOar(scene, character, shark, (result) => {
   if (result === 'scared') {
     shakeCamera(0.2);
+    playSound('whack');
     showToast('Whack! The shark swam off... for now');
   }
   if (result === 'killed') {
     shakeCamera(0.35);
+    playSound('whack');
     showToast('Shark down! Another one will come');
   }
 });
@@ -188,13 +225,15 @@ refreshHud();
 
 function setBuildMode(on) {
   buildMode = on;
+  playSound('click');
   builder.hide();
   refreshHud();
   refreshGhost();
 }
 
-function endGame(title, text) {
+function endGame(title, text, won) {
   gameEnded = true;
+  playSound(won ? 'win' : 'lose');
   sharkWarning.set(false);
   guide.hide();
   showEndScreen(title, text);
@@ -229,6 +268,7 @@ function swingTowardMouse() {
   if (!hasMouseAim) return;
   const me = character.worldPos;
   oar.swingAt(Math.atan2(mouseAim.x - me.x, mouseAim.z - me.z));
+  playSound('oar');
 }
 
 window.addEventListener('pointermove', (e) => {
@@ -243,7 +283,7 @@ window.addEventListener('pointermove', (e) => {
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 
 window.addEventListener('pointerdown', (e) => {
-  if (gameEnded || paused) return; // clicks on the pause menu don't throw the hook
+  if (!started || gameEnded || paused) return; // clicks on a menu don't throw the hook
 
   const p = getWaterPoint(e);
   if (p) {
@@ -267,13 +307,16 @@ window.addEventListener('pointerdown', (e) => {
     const item = selectedItem();
     if (item.id === 'sail' && raft.countItems('sail') >= MAX_SAILS) {
       showToast(`You can only have ${MAX_SAILS} sails`);
+      playSound('error');
       return;
     }
     if (!canAfford(item)) {
       showToast(needText(item));
+      playSound('error');
       return;
     }
     if (builder.place()) {
+      playSound('build');
       planks -= item.planks;
       rope -= item.rope;
       refreshHud();
@@ -284,7 +327,10 @@ window.addEventListener('pointerdown', (e) => {
     return;
   }
 
-  if (p) hook.throwAt(p);
+  if (p) {
+    hook.throwAt(p);
+    playSound('hook');
+  }
 });
 
 // ---------- Keyboard ----------
@@ -293,6 +339,14 @@ const keysDown = new Set();
 
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
+
+  if (!started) return; // the start screen has its own button
+
+  // M turns the sound on and off
+  if (key === 'm' && !e.repeat) {
+    showToast(toggleMute() ? 'Sound off' : 'Sound on');
+    return;
+  }
 
   // Esc or P opens/closes the pause menu
   if ((key === 'escape' || key === 'p') && !e.repeat) {
@@ -335,9 +389,11 @@ function getMoveInput() {
 
 // ---------- Pause ----------
 function setPaused(on) {
+  if (!started) return; // the start screen is not the pause menu
   if (gameEnded) on = false; // no pausing on the win / lose screen
   if (on === paused) return;
   paused = on;
+  setSoundPaused(on);
   keysDown.clear(); // so he doesn't keep walking after you resume
   if (paused) pauseMenu.show();
   else pauseMenu.hide();
@@ -362,6 +418,16 @@ function animate() {
   const dt = Math.min((now - lastTime) / 1000, 0.05); // seconds since last frame
   lastTime = now;
 
+  // Start screen: the sea moves behind the menu, but the game hasn't begun
+  if (!started) {
+    const idleT = now / 1000;
+    ocean.update(idleT);
+    raft.update(dt, idleT, character.position);
+    followRaft(raft.group.position.x, raft.group.position.z, dt);
+    renderer.render(scene, camera);
+    return;
+  }
+
   // Paused: just draw the frozen scene, don't move anything
   if (paused) {
     renderer.render(scene, camera);
@@ -384,6 +450,7 @@ function animate() {
   hook.update(dt);
   oar.update(dt);
   updateSplashes(dt, t);
+  updateTileBreak(dt, t);
 
   if (!gameEnded) {
     shark.update(dt, t);
@@ -398,14 +465,15 @@ function animate() {
     island.update(dt);
 
     if (raft.tiles.size === 0) {
-      endGame('Your raft is gone', 'The shark won this time.');
+      endGame('Your raft is gone', 'The shark won this time.', false);
     } else if (islandRevealed) {
       // Win = any tile actually touches the island's beach
       const touching = raft.distanceTo(island.position) < BEACH_REACH;
       if (touching) {
         endGame(
           'You made it!',
-          `You found the map, built a ${raft.tiles.size} tile raft, and reached the island.`
+          `You found the map, built a ${raft.tiles.size} tile raft, and reached the island.`,
+          true
         );
       } else if (island.isArrived() && !steerHintShown) {
         showToast('Sail over and touch the beach!');

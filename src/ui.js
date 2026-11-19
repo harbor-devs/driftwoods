@@ -95,6 +95,7 @@ export function createHud() {
     <div><kbd>L-Click</kbd>Hook</div>
     <div><kbd>R-Click</kbd><kbd>Space</kbd>Oar</div>
     <div><kbd>B</kbd><span class="build-label">Build</span></div>
+    <div><kbd>M</kbd>Sound</div>
     <div><kbd>Esc</kbd>Pause</div>
   `;
   document.body.appendChild(keys);
@@ -268,6 +269,17 @@ export function showEndScreen(title, text) {
   document.getElementById('restart').addEventListener('click', () => location.reload());
 }
 
+// The controls list, shown on the start screen and in the pause menu
+const CONTROL_ROWS = `
+  <div><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Walk (or arrow keys). Stand near an edge to lean and steer the raft</span></div>
+  <div><span class="keys"><kbd>L-Click</kbd></span><span>Throw the hook</span></div>
+  <div><span class="keys"><kbd>R-Click</kbd><kbd>Space</kbd></span><span>Swing the oar</span></div>
+  <div><span class="keys"><kbd>B</kbd></span><span>Build mode</span></div>
+  <div><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span><span>Pick what to build</span></div>
+  <div><span class="keys"><kbd>M</kbd></span><span>Sound on and off</span></div>
+  <div><span class="keys"><kbd>Esc</kbd><kbd>P</kbd></span><span>Pause and resume</span></div>
+`;
+
 // ---------- Pause menu ----------
 // onResume and onRestart are functions main.js gives us
 export function createPauseMenu({ onResume, onRestart }) {
@@ -281,14 +293,7 @@ export function createPauseMenu({ onResume, onRestart }) {
         <button class="btn primary resume">Resume</button>
         <button class="btn restart">Restart</button>
       </div>
-      <div class="controls">
-        <div><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Walk (or arrow keys). Stand near an edge to lean and steer the raft</span></div>
-        <div><span class="keys"><kbd>L-Click</kbd></span><span>Throw the hook</span></div>
-        <div><span class="keys"><kbd>R-Click</kbd><kbd>Space</kbd></span><span>Swing the oar</span></div>
-        <div><span class="keys"><kbd>B</kbd></span><span>Build mode</span></div>
-        <div><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span><span>Pick what to build</span></div>
-        <div><span class="keys"><kbd>Esc</kbd><kbd>P</kbd></span><span>Pause and resume</span></div>
-      </div>
+      <div class="controls">${CONTROL_ROWS}</div>
     </div>
   `;
   document.body.appendChild(el);
@@ -307,4 +312,35 @@ export function createPauseMenu({ onResume, onRestart }) {
   }
 
   return { show, hide };
+}
+
+// ---------- Start screen ----------
+// onStart is a function main.js gives us. It runs when you press Start.
+export function createStartScreen({ mapPieces, raftGoal, onStart }) {
+  const el = document.createElement('div');
+  el.id = 'start-screen';
+  el.className = 'overlay';
+  el.innerHTML = `
+    <div class="wood board">
+      <h1>Driftwood</h1>
+      <p>Hook floating planks and build your raft. Find ${mapPieces} map pieces in bottles, grow the raft to ${raftGoal} tiles, then sail to the island. A shark is after your raft.</p>
+      <div class="buttons">
+        <button class="btn primary start">Start</button>
+      </div>
+      <div class="controls">${CONTROL_ROWS}</div>
+    </div>
+  `;
+  document.body.appendChild(el);
+
+  const button = el.querySelector('.start');
+  button.addEventListener('click', onStart);
+  button.focus(); // so Enter starts the game too
+
+  function hide() {
+    el.classList.add('hide');
+    if (document.activeElement) document.activeElement.blur(); // so Space can't press it again
+    setTimeout(() => el.remove(), 500);
+  }
+
+  return { hide };
 }

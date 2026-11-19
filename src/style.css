@@ -525,3 +525,22 @@ kbd {
 #build-menu .slot.poor .cost {
   color: #ff9a8a;
 }
+
+/* ---------- Start screen ---------- */
+#start-screen {
+  transition: opacity 0.4s;
+}
+
+#start-screen.hide {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#start-screen h1 {
+  margin-bottom: 10px;
+  font-size: 64px;
+}
+
+#start-screen .board {
+  width: min(480px, 90vw);
+}

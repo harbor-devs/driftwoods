@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { waveHeight } from './ocean.js';
+import { playSound } from './sound.js';
 
 // ---------- Splash sizes ----------
 // drops = how many water drops fly up
@@ -48,6 +49,7 @@ export function initSplashes(s) {
 export function splash(point, size = 'medium') {
   if (!scene) return;
   const s = SIZES[size] || SIZES.medium;
+  playSound(`splash-${SIZES[size] ? size : 'medium'}`);
   const y = waveHeight(point.x, point.z, time);
 
   // Drops fly up and out in a circle

@@ -290,7 +290,7 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
             raft.remove(target.tile);
             tiles.delete(target.key);
             target = null;
-            onEvent('tileLost');
+            onEvent('tileLost', { x: w.x, z: w.z });
             backToCircling();
           }
         }
