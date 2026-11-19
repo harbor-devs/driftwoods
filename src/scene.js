@@ -4,7 +4,15 @@ import * as THREE from 'three';
 export const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// Tone mapping: bright parts fade softly like a real camera instead of clipping to flat white
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0; // overall brightness, try 0.9 to 1.2
+
+// Soft shadows: blurred edges instead of hard jagged ones
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
 document.body.appendChild(renderer.domElement);
 
 // ---------- Scene ----------
@@ -26,9 +34,10 @@ camera.position.set(0, CAM_HEIGHT, CAM_BACK);
 camera.lookAt(0, 0, 0);
 
 // ---------- Lights ----------
-scene.add(new THREE.HemisphereLight(0xffffff, 0x2a6f8f, 1.2));
+// A bit brighter than before, because tone mapping darkens things slightly
+scene.add(new THREE.HemisphereLight(0xffffff, 0x2a6f8f, 1.5));
 
-const sun = new THREE.DirectionalLight(0xfff2d6, 2);
+const sun = new THREE.DirectionalLight(0xfff2d6, 2.6);
 sun.position.set(10, 20, 8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -36,6 +45,9 @@ sun.shadow.camera.left = -15;
 sun.shadow.camera.right = 15;
 sun.shadow.camera.top = 15;
 sun.shadow.camera.bottom = -15;
+// These two stop "shadow acne" (thin striped lines on the water and raft)
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.02;
 scene.add(sun);
 scene.add(sun.target); // needed so we can move where the sun points
 
