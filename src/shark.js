@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 
 // ---------- Shark settings ----------
 const CIRCLE_RADIUS = 9; // how far from the raft it circles
@@ -7,12 +8,18 @@ const SWIM_SPEED = 7.5; // faster than the raft, so you can't outrun it forever
 const BITE_TIME = 2; // seconds it chews before the tile is gone
 const BITE_ESCAPE = 2.5; // if the tile gets this far away, the bite is cancelled
 const FIRST_ATTACK = 15; // seconds before the first attack
-const MAX_HEALTH = 3; // spear hits to kill it
+const MAX_HEALTH = 3; // oar hits to kill it
 const FLEE_TIME = 3; // seconds it swims away after getting hit
 const AWAY_MIN = 15; // min seconds it stays away after being scared
 const AWAY_MAX = 25; // max seconds it stays away
 const RESPAWN_TIME = 40; // seconds until a new shark comes after one dies
 const ANGER_PER_LEVEL = 0.15; // each new shark is 15% faster
+
+// ---------- Model settings ----------
+const MODEL_PATH = '/models/shark.fbx';
+const SHARK_LENGTH = 3.2; // how long the shark is, nose to tail
+const SWIM_DEPTH = 0.4; // how far under the surface it swims (only the fin pokes out)
+const MODEL_TURN = 0; // if the shark swims BACKWARDS, change this to Math.PI
 
 function randomBetween(min, max) {
   return min + Math.random() * (max - min);
@@ -26,25 +33,59 @@ function distXZ(a, b) {
 
 // onEvent gets called with 'attack', 'bite' or 'tileLost' so main.js can react
 export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) {
-  // ---------- Body (made of simple low-poly cones) ----------
+  // The group is what moves around. The model goes inside it once it loads.
   const shark = new THREE.Group();
-  const skin = new THREE.MeshStandardMaterial({ color: 0x5b6b78, flatShading: true });
-
-  const body = new THREE.Mesh(new THREE.ConeGeometry(0.6, 3, 6), skin);
-  body.rotation.x = Math.PI / 2; // nose points forward
-  shark.add(body);
-
-  const fin = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.2, 4), skin);
-  fin.position.set(0, 0.7, -0.2); // sticks up out of the water
-  fin.castShadow = true;
-  shark.add(fin);
-
-  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1, 4), skin);
-  tail.rotation.x = -Math.PI / 2;
-  tail.position.z = -1.8;
-  shark.add(tail);
-
   scene.add(shark);
+
+  // ---------- Load the real model ----------
+  const materials = []; // kept so we can flash them red when hit
+  let mixer = null; // plays the model's animation
+  let swimAction = null;
+
+  new FBXLoader().load(
+    MODEL_PATH,
+    (model) => {
+      // Make it the right size: measure it, then scale so its longest side = SHARK_LENGTH
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const longest = Math.max(size.x, size.y, size.z);
+      model.scale.setScalar(SHARK_LENGTH / longest);
+
+      // If the model was built pointing along x, turn it so the nose points forward (z)
+      if (size.x > size.z) model.rotation.y = Math.PI / 2;
+      model.rotation.y += MODEL_TURN;
+
+      // Center it inside the group
+      const box2 = new THREE.Box3().setFromObject(model);
+      const center = box2.getCenter(new THREE.Vector3());
+      model.position.sub(center);
+
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.frustumCulled = false; // animated meshes sometimes vanish without this
+          // Own copy of each material so the red flash works
+          child.material = Array.isArray(child.material)
+            ? child.material.map((m) => m.clone())
+            : child.material.clone();
+          (Array.isArray(child.material) ? child.material : [child.material]).forEach((m) => {
+            if (m.emissive) materials.push(m);
+          });
+        }
+      });
+
+      shark.add(model);
+
+      // The model has one animation: Swim. We just change how fast it plays.
+      if (model.animations.length > 0) {
+        mixer = new THREE.AnimationMixer(model);
+        swimAction = mixer.clipAction(model.animations[0]);
+        swimAction.play();
+      }
+    },
+    undefined,
+    (err) => console.error('Could not load the shark model:', err)
+  );
 
   // ---------- State ----------
   // state can be: 'circling', 'attacking', 'biting', 'fleeing', 'away', 'dead'
@@ -66,7 +107,11 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
     return SWIM_SPEED * (1 + level * ANGER_PER_LEVEL);
   }
 
-  // Put the shark somewhere out around the raft (around its real x AND z)
+  function setFlash(hex) {
+    materials.forEach((m) => m.emissive.setHex(hex));
+  }
+
+  // Put the shark somewhere out around the raft
   function placeOnCircle(radius) {
     angle = Math.random() * Math.PI * 2;
     pos.set(
@@ -124,7 +169,7 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
     attackTimer = randomBetween(8, 12);
   }
 
-  // ---------- Called by the spear ----------
+  // ---------- Called by the oar ----------
   // Returns 'scared', 'killed', or null (if it can't be hit right now)
   function hit() {
     if (state === 'fleeing' || state === 'away' || state === 'dead') return null;
@@ -133,7 +178,7 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
     health -= 1;
 
     // Flash red
-    skin.emissive.setHex(0xff3333);
+    setFlash(0xff3333);
     flashTimer = 0.25;
 
     if (health <= 0) {
@@ -160,10 +205,19 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
 
   // ---------- Runs every frame ----------
   function update(dt, t) {
+    // Swim animation speed: calm while circling, fast while chasing, thrashing while biting
+    if (swimAction) {
+      if (state === 'biting') swimAction.timeScale = 2.5;
+      else if (state === 'attacking' || state === 'fleeing') swimAction.timeScale = 1.8;
+      else if (state === 'dead') swimAction.timeScale = 0.2;
+      else swimAction.timeScale = 1;
+    }
+    if (mixer) mixer.update(dt);
+
     // Red flash fades back to normal
     if (flashTimer > 0) {
       flashTimer -= dt;
-      if (flashTimer <= 0) skin.emissive.setHex(0x000000);
+      if (flashTimer <= 0) setFlash(0x000000);
     }
 
     if (state === 'circling') {
@@ -264,8 +318,8 @@ export function createShark(scene, raft, tiles, waveHeight, onEvent = () => {}) 
       return; // skip the wave height below so it keeps sinking
     }
 
-    // Stay just under the surface so only the fin pokes out
-    pos.y = waveHeight(pos.x, pos.z, t) - 0.35;
+    // Stay under the surface so only the fin pokes out
+    pos.y = waveHeight(pos.x, pos.z, t) - SWIM_DEPTH;
   }
 
   return { update, hit, isNear, isThreat, position: pos };

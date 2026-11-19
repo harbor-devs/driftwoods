@@ -85,19 +85,37 @@ export function createCharacter(raft) {
     velocity.x += (ix * WALK_SPEED - velocity.x) * k;
     velocity.y += (iz * WALK_SPEED - velocity.y) * k;
 
-    // Move one axis at a time, so he slides along edges instead of getting stuck
+        // Move one axis at a time, so he slides along edges instead of getting stuck
     const p = root.position;
-
+    const sx = Math.sign(velocity.x);
+    const sz = Math.sign(velocity.y);
     const nextX = p.x + velocity.x * dt;
-    if (raft.hasTileAt(nextX + Math.sign(velocity.x) * CHAR_RADIUS, p.z)) p.x = nextX;
-    else velocity.x = 0;
-
     const nextZ = p.z + velocity.y * dt;
-    if (raft.hasTileAt(p.x, nextZ + Math.sign(velocity.y) * CHAR_RADIUS)) p.z = nextZ;
-    else velocity.y = 0;
 
-    // If the shark ate the tile under him, hop to the closest safe tile
-    if (!raft.hasTileAt(p.x, p.z)) {
+    const canX = raft.hasTileAt(nextX + sx * CHAR_RADIUS, p.z);
+    const canZ = raft.hasTileAt(p.x, nextZ + sz * CHAR_RADIUS);
+    const canDiag =
+      sx !== 0 && sz !== 0 &&
+      raft.hasTileAt(nextX + sx * CHAR_RADIUS, nextZ + sz * CHAR_RADIUS);
+
+    if (!canX && !canZ && canDiag) {
+      // Corner crossing: two tiles that only touch at a corner, step across diagonally
+      p.x = nextX;
+      p.z = nextZ;
+    } else {
+      if (canX) p.x = nextX;
+      else velocity.x = 0;
+
+      if (raft.hasTileAt(p.x, nextZ + sz * CHAR_RADIUS)) p.z = nextZ;
+      else velocity.y = 0;
+    }
+
+    // If the shark ate the tile under him, hop to the closest safe tile.
+    // (But not while he's crossing a corner, he's standing right on the seam there.)
+    const crossingCorner =
+      raft.hasTileAt(p.x + sx * CHAR_RADIUS, p.z + sz * CHAR_RADIUS) ||
+      raft.hasTileAt(p.x - sx * CHAR_RADIUS, p.z - sz * CHAR_RADIUS);
+    if (!raft.hasTileAt(p.x, p.z) && !crossingCorner) {
       const safe = raft.closestTileCenter(p.x, p.z);
       if (safe) {
         p.x = safe.x;
